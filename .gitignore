@@ -6,6 +6,8 @@ luac.out
 *.zip
 *.tar.gz
 
+data/settings_*.xml
+
 # Object files
 *.o
 *.os
