@@ -28,19 +28,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     Tracks Mog Segments earned in Odyssey per run, total held - total displays in alternate color if below a minimum threshold - displays it all on screen
     with messages and sound effects in response to certain events; Displays enemies' physical and elemental Resistances
 	as well as vulnerability to cruel joke. Provides maps for Sheol zones. Credit to Marian Arlt for the resistances 
-	and maps. 
-		Solves the targetting problems inside Odyssey segfarms with an intuitive autotargetting system.
+	and maps. Solves the targetting problems inside Odyssey segfarms with an intuitive autotargetting system.
 	Now swaps off of and ignores targets with invincible or perfect dodge until it wears.
 	Now targets the same mob name until there are no more within distance limit or target is swapped manually.
 	Introduced the autoweaponswap system to match physical damage types of the targets autotargeted.
 	I give this to you now, the community of the game that I have loved so much for so many years.
 	*Future development - Chest opening / Izzat display.
-	The code in this program was not written to be asthetically pleasing or for other developers to easily read and interpret the code for collaboration on the project. That said I have progressed in knowledge 
-	and skill over the course of developing this and I have wanted to minimize cost, I will continue to do that however as is I run 5 copies of this on the same computer and I can tell no difference in my resources
-	usage, I also know people that play FFXI with very old PCs and this addon runs well - it has been very extensively tested.
-	This addon does not do things that would pose a risk of suspension through suspicious looking activity on server side or visibly to other players. I have developed this with a particular focus on keeping 
-	the user clean. That said, it is important to understand that under the right circumstances even using Windower + basic addons could be used against a player if SE truly wished to exercise authority over a player
-	for one reason or another. DBAA Don't Be An Asshole.
+	The code in this program was not written to be asthetically pleasing or for other developers to easily read and interpret the code for collaboration on the project. That said I will continue to develop it and reduce cost.
     More to come!
 ]] 
 
@@ -2046,7 +2040,7 @@ windower.register_event('addon command', function(...)
     elseif args[1] == 'help' then
         windower.add_to_chat(207, 'OdyPro help:')
         windower.add_to_chat(206, '-------------C O M M A N D  L I S T-------------')
-        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
+        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
         windower.add_to_chat(206, '-----C O M M A N D S   E X P L A N A T I O N----')
         windower.add_to_chat(207, '- reset : sets the Instance Mog Segments to 0 and updates the display.')
         windower.add_to_chat(207, '- togglesound / ts: toggle sound effects off and on (on by default).')
@@ -2065,6 +2059,7 @@ windower.register_event('addon command', function(...)
         windower.add_to_chat(207, '- mogdisplay / md: toggles display of all ody moogle data outside of Rabao and Walk Of Echoes.')
         windower.add_to_chat(207, '- reload / r: reloads addon.')
 		windower.add_to_chat(207, '- unstuck : cancels menu soft-lock state if this happens.')
+		windower.add_to_chat(207, '- unstuck2 : cancels menu soft-lock state with veridical conflux; should only be used if unstuck does not clear menu-lock.')
 		------------------------A U T O - T A R G E T T I N G   S Y S.  C O M M A N D S--------------------------------------------
 		windower.add_to_chat(206, '------A U T O - T A R G E T T I N G   S Y S.  ------')
         windower.add_to_chat(207, '- add [target keyword] i.e. Crab or Nostos Crab or Nostos adds keyword to target scanner.')
@@ -2398,7 +2393,7 @@ function build_res_strings(target, target_index)
 end
 
 function print_resistances(target_index)
-    if flags.gaolzone then log('The res tra - AWS systems stack was loaded') print ('The res tra - AWS systems stack was loaded' ) windower.unregister_event(res_monitor, floor_monitor) return end
+    if flags.gaolzone then windower.unregister_event(res_monitor, floor_monitor) return end
 	if settings.res_box.show then
         local target = windower.ffxi.get_mob_by_index(target_index)
         local is_halo = target and target.name:contains('Halo')
@@ -2893,7 +2888,6 @@ windower.register_event('zone change', function(new_id, old_id)
 			if flags.segzone and not flags.gaolzone then
 				log('Total haul: ' .. earned_MogSegments)
 			end
-			flags.sheolzone = nil
 			flags.segzone = nil
 			flags.gaolzone = false
             save_record()
