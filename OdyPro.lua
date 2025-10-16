@@ -34,13 +34,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	Introduced the autoweaponswap system to match physical damage types of the targets autotargeted.
 	I give this to you now, the community of the game that I have loved so much for so many years.
 	*Future development - Chest opening / Izzat display.
-	The code in this program was not written to be asthetically pleasing or for other developers to easily read and interpret the code for collaboration on the project. That said I will continue to develop it and reduce cost.
+	The code in this program was not written to be asthetically pleasing or for other developers to easily read and interpret the code for collaboration on the project. That said I will continue to develop it 
+	and reduce cost.
     More to come!
 ]] 
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.4.1'
+_addon.version = '3.4.2'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -80,7 +81,7 @@ local sound_paths = {
 	slashing = addon_path .. 'data/waves/slashing.wav',
 	blunt = addon_path .. 'data/waves/blunt.wav',
 }
-local settings = config.load('data/settings_' .. player_name .. '.xml', {
+local settings = config.load('data/settings_'..player_name..'.xml',{
     pos = {
         x = screen_w / 5,
         y = screen_h / 10000
@@ -190,6 +191,8 @@ local packets_to_send = T{}
 local last_threshold = 0
 local segs_message_id = 40012
 local auto_grabbing_coroutine = nil
+local moglophone_timer = 0
+local remaining_time
 local new_moglophone_ii_count = 0
 local inside_ody_moglophone_ii_count = 3
 local moglophone_start_time = settings.moglophone_start_time or nil
@@ -217,6 +220,7 @@ flags.auto_amp_grabbing_in_progress = false
 flags.auto_amp_grabbing_state = false
 flags.manual_amp_grabbing_state = false
 flags.alarmTriggered = false
+flags.alarmDisabled = false
 flags.has_moglophone = true
 flags.segments_loaded_fully = false
 flags.inventory_fully_loaded = false
@@ -231,6 +235,7 @@ flags.face_target_triggered = false
 flags.mobAlreadyTargetted = false
 flags.resistance_intel = true
 flags.targettingMessageDisplayed = nil
+flags.unit_flag = 0
 
 timing.last_disengage_time = os.time()
 timing.last_move_time = os.clock()
@@ -438,19 +443,6 @@ initialization()
 
 windower.register_event('incoming chunk', function(id, data, org, modi, is_injected, is_blocked)
 	local current_time
-    -- Listens for Key_item packet while in rabao to update display for Moglophone / Moglophone II possession
-	    if flags.in_Rabao_zone and not flags.zoning then
-			current_time = os.clock()
-            if id == 0x034 then
-				local packetchecker = packets.parse('incoming', data)
-				if packetchecker["NPC"] == 17789079 and packetchecker["NPC Index"] == 151 and packetchecker["_unknown1"] == 8 and packetchecker["Menu ID"] == 2005 then
-					flags.busy_doing_stuff = true
-				end
-			elseif id == 0x055 and (current_time - timing.last_KI_time >= timing.spam_interval) and not flags.zoning then
-                update_display()
-				timing.last_KI_time = current_time
-            end
-        end
 	if is_injected or id ~= 0x118 then
         return
     end
@@ -466,32 +458,23 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
         start_up = false
     elseif new_MogSegments ~= previous_MogSegments then
 		local player = windower.ffxi.get_player()
-	    if player and player.name == current_character then 
-            --earned_MogSegments = earned_MogSegments + (new_MogSegments - previous_MogSegments)
-		else
+	    if player and player.name ~= current_character then 
 		    earned_MogSegments = 0
 		end
             previous_MogSegments = new_MogSegments
             update_display()
     end
 	timing.last_update_time = current_time
-
 end)
 
 windower.register_event('incoming chunk', function(id, data, org, modi, is_injected, is_blocked)
-    ---------------------------------------------------------------------------------------------
+	local current_time
+	---------------------------------------------------------------------------------------------
 	if not flags.in_Odyssey_zone and not flags.in_Rabao_zone then return end
 	local packet = packets.parse('incoming', data)
     if flags.in_Odyssey_zone then
-        -- Parse the packet to log relevant information
-
-        if id == 0x02A and not injected then
-            --windower.add_to_chat(207,
-                --string.format('Packet 0x02A - Message ID: %d, Param 1: %d, Param 2: %d', packet['Message ID'],
-                    --packet['Param 1'], packet['Param 2']))
-					
-					
 		------------------RP Charge tools--------------------------------
+        if id == 0x02A and not injected then		
 			if packet['Message ID'] == 40022 then
 			   	if packet['Param 1'] == 6608 then
 					active_charge = true
@@ -545,11 +528,47 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 				end
 			end
         end
-	elseif flags.in_Rabao_zone then
+	elseif flags.in_Rabao_zone and not flags.zoning then
+		--current_time = os.clock()
 		if id == 0x02A and not injected then
 			if packet['Message ID'] == 45041 then
 				induct_data()
 				log("Updating segments")
+			end
+		elseif id == 0x034 then
+			local packetchecker = packets.parse('incoming', data)
+			if packetchecker["NPC"] == 17789079 and packetchecker["NPC Index"] == 151 and packetchecker["_unknown1"] == 8 and packetchecker["Menu ID"] == 2005 then
+				flags.busy_doing_stuff = true
+			end
+		elseif id == 0x05C then
+			local msg_id = data:unpack('H', 3)
+			local param1 = data:unpack('I', 9)
+			local npc_id = data:unpack('I', 5)
+			local seconds_remaining
+			flags.unit_flag  = data:unpack('I', 13)
+			if npc_id == 2 and param1 > 0 and param1 <= 60 then
+				if flags.unit_flag == 0 then
+					local hours_remaining = param1
+					seconds_remaining = hours_remaining * 3600
+					moglophone_timer = hours_remaining
+				elseif flags.unit_flag == 1 then
+					local minutes_remaining = param1
+					seconds_remaining = minutes_remaining * 60
+					moglophone_timer = minutes_remaining + 1
+				elseif flags.unit_flag == 2 then
+					seconds_remaining = param1
+					moglophone_timer = seconds_remaining + 59
+				end
+				if param1 > 0 then
+					flags.unable_to_grab = true
+					windower.play_sound(sound_paths.blank)
+					moglophone_start_time = os.time() - (72000 - (seconds_remaining + 59))  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
+					settings.moglophone_start_time = moglophone_start_time
+					flags.alarmDisabled = false
+					flags.alarmTriggered = false
+					config.save(settings)
+					update_display()
+				end
 			end
 		end
     end
@@ -562,7 +581,8 @@ local function process_packet(packet)
 	local packet_delayification = 1
 	if flags.auto_grabbing_state then
 		if #packets_to_send == 2 then
-			packet_delayification = 2
+			coroutine.sleep(1)
+			packet_delayification = 1
 		elseif #packets_to_send == 1 then
 			packet_delayification = 1.5
 		end
@@ -590,8 +610,35 @@ local function process_packet(packet)
 	----------------------------------------------
 	if not (flags.auto_grabbing_in_progress or flags.auto_II_grabbing_in_progress or flags.auto_amp_grabbing_in_progress) then return end
     if #packets_to_send > 0 then
-        local next_packet = table.remove(packets_to_send, 1)
-        coroutine.schedule(function() process_packet(next_packet) end, packet_delayification)
+		if flags.auto_grabbing_state and #packets_to_send == 2 and flags.unable_to_grab then
+			if moglophone_timer and moglophone_timer > 1 then
+				local unit 
+				if flags.unit_flag == 0 then
+					unit = "hours"
+				elseif flags.unit_flag == 1 then
+					unit = "minutes"
+				elseif flags.unit_flag == 2 then
+					unit = "seconds"
+				end
+				log(('You can\'t get a moglophone for %d more %s.'):format(moglophone_timer,unit))
+			end
+			local p_a_c_k = packets.new('outgoing', 0x05B)
+				p_a_c_k["Target"] = 17789079
+				p_a_c_k["Option Index"] = 0
+				p_a_c_k["_unknown1"] = 16384
+				p_a_c_k["Target Index"] = 151
+				p_a_c_k["Automated Message"] = false
+				p_a_c_k["_unknown2"] = 0
+				p_a_c_k["Zone"] = 247
+				p_a_c_k["Menu ID"] = 2001
+			packets.inject(p_a_c_k)
+			packets_to_send:clear()
+			auto_grabbing_coroutine = nil
+			flags.unable_to_grab = false
+		else
+			local next_packet = table.remove(packets_to_send, 1)
+			coroutine.schedule(function() process_packet(next_packet) end, packet_delayification)
+		end
     else
         auto_grabbing_coroutine = nil
     end
@@ -620,12 +667,9 @@ local function process_packet(packet)
 			if has_moglophone_now then   -- Now, was the operation a success ?
 				windower.play_sound(sound_paths.pickup)  -- Play my custom made sound if it was
 				log('Success')
-			else
-			    if not flags.action_cancellation then
-			        flags.unable_to_grab = true   -- if the attempt failed, and it wasn't because we cancelled it, we don't want to try again since this can mean the timer is off due to not having the addon loaded when picking up a moglophone.
-				end
 			end
 			  -- signal the end of the procedure
+			flags.busy_doing_stuff = false
 			flags.auto_grabbing_state = false
 			flags.auto_grabbing_in_progress = false
 		elseif flags.auto_II_grabbing_state then
@@ -654,7 +698,7 @@ end
 
    -- WARNING THIS IS A VERY COMPLEX CALLBACK, IT IS NOT RECOMMENDED TO JACK AROUND WITH THIS.
 windower.register_event('incoming chunk', function(id, data, org, modi, is_injected, is_blocked)	
-	if--[[not player or ]] not flags.in_Rabao_zone or not (flags.auto_grabbing_state or flags.auto_II_grabbing_state or flags.auto_amp_grabbing_state or entry_request.poke or entry_request.enter_poke) then return end
+	if not flags.in_Rabao_zone or not (flags.auto_grabbing_state or flags.auto_II_grabbing_state or flags.auto_amp_grabbing_state or entry_request.poke or entry_request.enter_poke) then return end
 	if not (flags.auto_grabbing_in_progress or flags.auto_II_grabbing_in_progress or flags.auto_amp_grabbing_in_progress or entry_request.poke or entry_request.enter_poke) then return end
 	if id == 0x034 then
 		local player = windower.ffxi.get_player()
@@ -995,7 +1039,6 @@ function display_message(earned_MogSegments)
             windower.add_to_chat(121, player_name .. '\'s new title: "The greatest there ever was or will be." ')
             if not flags.soundCurrentlyPlaying and toggle_sound == true then
                 flags.soundCurrentlyPlaying = true
-                --windower.play_sound(sound_paths.a_minor)
                 coroutine.sleep(3)
                 flags.soundCurrentlyPlaying = false
             end
@@ -1072,22 +1115,20 @@ end
 local function start_moglophone_timer()
     moglophone_start_time = os.time() -- Get the current real-world time
     settings.moglophone_start_time = moglophone_start_time -- Save the start time to settings file
-	alarmDisabled = false  
-	if alarmDisabled == false then flags.alarmTriggered = false end   
-	settings.alarmDisabled = alarmDisabled  
+	flags.alarmDisabled = false  
+	if flags.alarmDisabled == false then flags.alarmTriggered = false end   
     config.save(settings) 
 	update_display()
 end
 
 local function load_timer_from_settings()
 	moglophone_start_time = settings.moglophone_start_time
-	alarmDisabled = settings.alarmDisabled
 end
 
 local function moglophone_alarm_handler()
 	--local zone_identification = windower.ffxi.get_info().zone
 	local has_moglophone_now = has_key_item(key_item_ids.Moglophone)
-	if flags.has_moglophone == false and remaining_time < 1 and not alarmDisabled and not flags.in_Odyssey_zone and not flags.auto_grabbing_in_progress and not flags.zoning then
+	if flags.has_moglophone == false and remaining_time < 1 and not flags.alarmDisabled and not flags.in_Odyssey_zone and not flags.auto_grabbing_in_progress and not flags.zoning then
      flags.alarmTriggered = true 
 		if not flags.auto_grabbing_in_progress and not has_moglophone_now then
 		    windower.play_sound(sound_paths.prelude)
@@ -1240,6 +1281,7 @@ function auto_moglophone_grabber()
 		coroutine.schedule(function() 
 			flags.auto_grabbing_in_progress = false
 			flags.auto_grabbing_state = false
+			flags.unable_to_grab = false
 		end, 17)
 		if math.sqrt(moogle_distance) < 6 then
 			windower.add_to_chat(200, 'Picking up moglophone...')
@@ -1359,7 +1401,6 @@ local function use_amplifier()
 	elseif timing.attempt_number >= 7 then
 		attempt_sequence = "Fifth+"
 	end
-	--if in_lobby_check() then auto_use_amp_in_progress = false return end
 	log('You do not have an active Moogle Amplifier attempting to use; ('..attempt_sequence..' attempt.)\n//op tarp to toggle auto-rp')
 	coroutine.sleep(2)
 	windower.send_command('get "Moogle Amplifier" all')
@@ -1496,9 +1537,6 @@ function update_display()
 						end
 						inside_ody_moglophone_ii_count = moglophone_ii_count
 					end	
-					--if auto_use_amp_in_progress and in_lobby_check() then
-						--auto_use_amp_in_progress = false
-					--end
 				else
 					inside_ody_moglophone_ii_count = moglophone_ii_count
 					amp_tools.amp_consumed = true
@@ -1524,10 +1562,10 @@ function update_display()
 		local me,target_id,moogle_distance
 		target_id = 17789079
 		-----------------------Auto-Amp-Grabbing Machinery---------------------------------------------
-		if previous_MogSegments > 13500 and flags.segments_loaded_fully and flags.is_standing_still and flags.inventory_fully_loaded then
+		if amp_tools.total_moogle_amps < 3 and toggle_auto_amp then
 			local playerinv = windower.ffxi.get_items().inventory
 			local freeslots = playerinv.max - playerinv.count
-			if amp_tools.total_moogle_amps < 3 and toggle_auto_amp then
+			if previous_MogSegments > 13500 and flags.segments_loaded_fully and flags.is_standing_still and flags.inventory_fully_loaded then
 				if freeslots >= 1 then
 					amp_tools.amps_needed = 3 - amp_tools.total_moogle_amps
 					if not flags.auto_grabbing_in_progress and not flags.auto_II_grabbing_in_progress and not flags.auto_amp_grabbing_in_progress then
@@ -1551,14 +1589,15 @@ function update_display()
 			end
 		end
 		------------------------Auto-Moglophone grabbing machinery---------------------------------
-		if not flags.unable_to_grab and not flags.zoning then
+		if not flags.zoning and not flags.busy_doing_stuff then
 			if not flags.auto_grabbing_in_progress and not flags.auto_II_grabbing_in_progress and not flags.auto_amp_grabbing_in_progress then
-				if flags.has_moglophone == false and remaining_time < 1 and flags.in_Rabao_zone and not flags.auto_grabbing_in_progress and not flags.zoning then
+				if flags.has_moglophone == false and remaining_time < 1 and flags.in_Rabao_zone then
 					mob = windower.ffxi.get_mob_by_id(target_id)
 					if mob and mob.distance then
 						moogle_distance = math.sqrt(mob.distance)
 						if moogle_distance < 6 then
-							if flags.is_standing_still and not flags.busy_doing_stuff then
+							if flags.is_standing_still then
+								flags.unable_to_grab = false
 								flags.action_cancellation = false
 								flags.auto_grabbing_in_progress = true
 								auto_moglophone_grabber()
@@ -1770,6 +1809,10 @@ local function odyssey_enter(zoneChoice)
 end
 
 windower.register_event('login', function()
+	flags.inventory_fully_loaded = false
+	coroutine.schedule(function()
+	flags.inventory_fully_loaded = true
+    end, 36)
     -- Check the player name or ID on login
     local player = windower.ffxi.get_player()
     if player and player.name ~= current_character then
@@ -1779,6 +1822,8 @@ windower.register_event('login', function()
         print('Character switched from '..current_character..' to '..player.name)
 		coroutine.sleep(5)
 		current_character = player.name
+		flags.unable_to_grab = false
+		--flags.busy_doing_stuff = false
 		--windower.send_command('op r')
         --current_character = player.name
     end
@@ -1916,7 +1961,7 @@ windower.register_event('addon command', function(...)
 		config.save(settings)
 		log('Auto-targetting systems max distance set to '..settings.ats_max_distance..'.')
 	elseif args[1] == 'pickup' then
-		alarmDisable = false
+		flags.alarmDisabled = false
 		flags.alarmTriggered = false
         start_moglophone_timer()
 		update_display()
@@ -1949,12 +1994,12 @@ windower.register_event('addon command', function(...)
 		---------------------------------------------
 	elseif args[1] == 'silence' then
 		windower.play_sound(sound_paths.blank)
-		alarmDisabled = true
+		flags.alarmDisabled = true
         --------------------------------------------
 	elseif args[1] == 'timerreset' then
-		moglophone_start_time = moglophone_start_time - remaining_time + (remaining_time * .001)  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
+		moglophone_start_time = os.time() - 72100--moglophone_start_time - remaining_time + (remaining_time * .001)  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
 		settings.moglophone_start_time = moglophone_start_time
-		alarmDisable = false
+		flags.alarmDisabled = false
 		flags.alarmTriggered = false
 		config.save(settings)
 		update_display()
@@ -2029,6 +2074,8 @@ windower.register_event('addon command', function(...)
 		windower.send_command('od p 3')
 	elseif args[1] == 'test' then 
 		print(flags.sheolzone)
+	elseif args[1] == 'mogtest' then 
+		print(flags.unable_to_grab)
     elseif args[1]  == 'slashing' or args[1] == 'piercing' or args[1] == 'blunt' then
         if args[2] == '' then
             windower.add_to_chat(123, '[OdyPro] Current ' .. args[1] .. ' set: ' .. tostring(settings.job_weapon_sets[current_main_job][args[1]]))
@@ -2932,7 +2979,8 @@ windower.register_event('zone change', function(new_id, old_id)
 end)
 
 windower.register_event('load', function()
-    windower.add_to_chat(207, 'Welcome to OdyPro 3.4.1 !')
+	flags.zoning = true
+    windower.add_to_chat(207, 'Welcome to OdyPro 3.4.2 !')
     if auto_ody_targetting then
         windower.add_to_chat(207, "Auto-targetting systems online, max distance set to "..ats_max_distance..'.')
     else
@@ -2948,6 +2996,7 @@ windower.register_event('load', function()
     end, 1)
     coroutine.schedule(function()
 		flags.segments_loaded_fully = true
+		flags.zoning = false
     end, 4)
     coroutine.schedule(function()
 		flags.inventory_fully_loaded = true
