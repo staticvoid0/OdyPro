@@ -1,4 +1,4 @@
-# 🧭 OdyPro v3.4.1
+# 🧭 OdyPro v3.4.2
 
 ### Mog Segment Tracker, Odyssey Target Info, and Intuitive Auto-Targeting Addon for Windower 4
 
@@ -54,15 +54,9 @@
 
 ---
 
-## 🧩 Tested Scenarios
+## Very well tested. No egregious stuff, just mega QoL - so play with confidence.
 
-- Odyssey segment farming  
-- Reading target info  
-- Tracking Mog Segments  
-- Auto amplifier/moglophone pickup  
-- Intelligent targeting and auto-weapon-swap  
-
-If you encounter issues, please report them!
+If you encounter an issue, please let me know.
 
 ---
 
@@ -94,6 +88,8 @@ If you encounter issues, please report them!
 | `//op amp #`                                  | Purchase `#` of amplifiers.               |
 | `//op charge`                                 | Manually set RP charge to *On*.           |
 | `//op uncharge`                               | Manually set RP charge to *Off*.          |
+| `//op pickup`                                 | Manually start moglophone timer.          |
+| `//op timerreset`                             | Manually set moglophone timer to *0:00*   |
 | `//op show` / `//op hide`                     | Show or hide display UI.                  |
 | `//op mogdisplay` / `//op md`                 | Toggle display of Ody moogle data.        |
 | `//op help`                                   | Display in-game command help list.        |
