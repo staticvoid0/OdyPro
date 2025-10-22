@@ -67,7 +67,7 @@ If you encounter an issue, please let me know.
    Windower4/addons/OdyPro/OdyPro.lua 
    
 2. Load the addon..
-   lua load OdyPro
+   lua load odypro
    
 
 
