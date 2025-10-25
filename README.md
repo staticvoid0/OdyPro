@@ -15,7 +15,7 @@
 - Fully compatible with Superwarp. Interprets and relays the commands. (//op port works just like //od port )
 - Odyssey queueing and entry commands 
  
- **Auto-targeting system** has mob-name prioritization and invincible/perfect-dodge detection and omission.  
+ **Auto-targeting system** has mob same-name prioritization and invincible/perfect-dodge detection and omission.  
  **Auto-weapon-swap (AWS)** hooks into Gearswap with Easy 1.2.3 setup.
 ---
 
