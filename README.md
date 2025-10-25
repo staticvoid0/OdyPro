@@ -1,26 +1,32 @@
 # 🧭 OdyPro v3.4.3
 
-### Mog Segment Tracker, Odyssey Target Info, and Intuitive Auto-Targeting Addon for Windower 4
+### Everything Odyssey Addon for Windower 4
 
-> Handles Moglophone & Amplifier pickup, offers optional auto-amp use inside Gaol, displays RP charge status, and includes powerful auto-targeting and auto-weapon-swap systems.  
-> Also shows target resistances and available maps for Sheol A, B, and C.
-
----
-
-## ✨ Features
-
-- Automatic Moglophone & Amplifier pickup  
-- Optional **Auto-RP** (auto amplifier usage inside Gaol)  
-- **Auto-targeting system** with mob-name prioritization and invincible/perfect-dodge awareness  
-- **Auto-weapon-swap (AWS)** that hooks into Gearswap  
-- Displays target resistances, mob types, and zone maps  
-- Odyssey queueing and entry commands  
-- Fully compatible with Superwarp commands  
-- Numerous bug fixes and QoL improvements  
-
+- Handles Moglophone & Amplifier pickup automatically.
+- Offers optional auto-amp use inside Gaol boss chambers.
+- Displays total mog segments, amount per instance and record for a single instance.
+- Displays Moglophone, Moglophone II and amplifier possession.
+- Displays RP charge status.
+- Tracks and displays moglophone timer, with a pickup alarm.
+- Includes powerful auto-targeting and auto-weapon-swap systems, the AWS system hooks into gearswap. 
+- Also shows target resistances and available maps for Sheol A, B, and C.
+- Fully compatible with Superwarp. Interprets and relays the commands. (//op port works just like //od port )
+- Odyssey queueing and entry commands 
+ 
+ **Auto-targeting system** has mob-name prioritization and invincible/perfect-dodge detection and omission.  
+ **Auto-weapon-swap (AWS)** hooks into Gearswap with Easy 1.2.3 setup.
 ---
 
 ## 🧾 Changelog
+
+### **v3.4.1 → v3.4.3**
+- Added auto moglophone timer setting. You no longer need to have had OdyPro loaded when picking up moglophone for the timer to be set.
+Please note auto-setting of the timer when standing near the Odyssey ??? in rabao will only be 100% accurate if it is within the last hour as the server does not send the exact minute remaining until < `60 minutes`.
+- All sounds have been rebalanced and are all now subject to the togglesound config setting which is saved to your settings file. ( //op ts )
+I hesitated to subject certain sounds to this setting since it is common to toggle sound off and never remember there are even sounds which can be very helpful since you can only look at one thing at a time, 
+especially for multiboxers.
+- Added a sound when toggling any of the toggle features off or on.
+- Added a visual indicator for the state of the auto-targeting-system. If it is on 'OdyPro' will be displayed orange, if it is off 'OdyPro' will be displayed similar color as the background.
 
 ### **v3.3 → v3.4**
 - Auto-targeting system now prioritizes mobs with the same name — smoother splits between players.  
@@ -65,9 +71,14 @@ If you encounter an issue, please let me know.
 1. Extract to your Windower `addons` folder.  
    Folder structure should look like:
    Windower4/addons/OdyPro/OdyPro.lua 
+   (If installing new version, ensure it is a single
+   OdyPro folder after extracting and just paste the 
+   OdyPro folder into your addons folder and
+   say yes to replace all files already present.
+   This will maintain your xml config files.)
    
 2. Load the addon..
-   lua load OdyPro
+   lua load odypro
    
 
 
