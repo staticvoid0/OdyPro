@@ -14,7 +14,6 @@
 - Shows target resistances and available maps for Sheol A, B, and C.
 - Fully compatible with Superwarp. Interprets and relays the commands. (//op port works just like //od port )
 - Odyssey queueing and entry commands
----
 
 **Auto-targeting system**  
 has NM → Agon → same-name-mob prioritization and invincible/perfect-dodge detection and omission.
