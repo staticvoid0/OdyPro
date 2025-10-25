@@ -11,7 +11,7 @@
 - Displays RP charge status.
 - Tracks and displays moglophone timer, with a pickup alarm.
 - Includes powerful auto-targeting and auto-weapon-swap systems, the AWS system hooks into gearswap. 
-- Also shows target resistances and available maps for Sheol A, B, and C.
+- Shows target resistances and available maps for Sheol A, B, and C.
 - Fully compatible with Superwarp. Interprets and relays the commands. (//op port works just like //od port )
 - Odyssey queueing and entry commands 
  
