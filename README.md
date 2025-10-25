@@ -13,13 +13,12 @@
 - Includes powerful auto-targeting and auto-weapon-swap systems, the AWS system hooks into gearswap. 
 - Shows target resistances and available maps for Sheol A, B, and C.
 - Fully compatible with Superwarp. Interprets and relays the commands. (//op port works just like //od port )
-- Odyssey queueing and entry commands 
+- Odyssey queueing and entry commands
+
+---
+ **Auto-targeting system** has NM > Agon > same-name-mob > prioritization and invincible/perfect-dodge detection and omission.
  
- **Auto-targeting system** 
- -Has NM > Agon > same-name-mob > prioritization and invincible/perfect-dodge detection and omission.
- 
- **Auto-weapon-swap (AWS)** 
- -Hooks into Gearswap with Easy 1.2.3 setup.
+ **Auto-weapon-swap (AWS)** hooks into Gearswap with Easy 1.2.3 setup.
 ---
 
 ## 🧾 Changelog
