@@ -71,11 +71,11 @@ If you encounter an issue, please let me know.
 1. Extract to your Windower `addons` folder.  
    Folder structure should look like:
    Windower4/addons/OdyPro/OdyPro.lua 
-   (If installing new version, ensure it is a single
+   If installing new version, ensure it is a single
    OdyPro folder after extracting and just paste the 
    OdyPro folder into your addons folder and
    say yes to replace all files already present.
-   This will maintain your xml config files.)
+   This will maintain your xml config files.
    
 2. Load the addon..
    lua load odypro
