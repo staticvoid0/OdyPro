@@ -2,6 +2,8 @@
 
 ### Everything Odyssey Addon for Windower 4
 
+[Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.4.3main/OdyPro.zip)
+
 - Handles Moglophone & Amplifier pickup automatically.
 - Offers optional auto-amp use inside Gaol boss chambers.
 - Displays total mog segments, amount per instance and record for a single instance.
