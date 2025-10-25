@@ -16,8 +16,11 @@
 - Odyssey queueing and entry commands
 ---
 
- **Auto-targeting system has NM → Agon → same-name-mob prioritization and invincible/perfect-dodge detection and omission.**
- **Auto-weapon-swap (AWS) hooks into Gearswap with Easy 1.2.3 setup.**
+**Auto-targeting system**  
+has NM → Agon → same-name-mob prioritization and invincible/perfect-dodge detection and omission.
+
+**Auto-weapon-swap (AWS)**  
+hooks into Gearswap with Easy 1.2.3 setup.
 
 
 ## 🧾 Changelog
