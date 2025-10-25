@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.4.2'
+_addon.version = '3.4.3'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -66,8 +66,6 @@ local screen_w = windower.get_windower_settings().ui_x_res
 local screen_h = windower.get_windower_settings().ui_y_res
 local sound_paths = {
     odyproload = addon_path .. 'data/waves/load.wav',
-    outstanding = addon_path .. 'data/waves/30.wav',
-    a_minor = addon_path .. 'data/waves/a_minor.wav',
 	prelude = addon_path .. 'data/waves/prelude.wav',
 	pickup = addon_path .. 'data/waves/pickup.wav',
 	swap = addon_path .. 'data/waves/swap.wav',
@@ -80,6 +78,7 @@ local sound_paths = {
 	piercing = addon_path .. 'data/waves/piercing.wav',
 	slashing = addon_path .. 'data/waves/slashing.wav',
 	blunt = addon_path .. 'data/waves/blunt.wav',
+	switch = addon_path .. 'data/waves/switch.wav',
 }
 local settings = config.load('data/settings_'..player_name..'.xml',{
     pos = {
@@ -325,6 +324,7 @@ local function toggleAutoAmp()
     end
     settings.toggle_auto_amp = toggle_auto_amp
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
 end
 
 toggle_auto_rp = settings.toggle_auto_rp
@@ -339,6 +339,7 @@ local function toggleAutoRP()
     end
     settings.toggle_auto_rp = toggle_auto_rp
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
 end
 
 toggle_auto_weapon_swap = settings.toggle_auto_weapon_swap
@@ -351,6 +352,7 @@ local function toggleAutoWeaponSwap()
     end
     settings.toggle_auto_weapon_swap = toggle_auto_weapon_swap
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
 end
 
 toggle_sound = settings.toggle_sound
@@ -363,6 +365,7 @@ local function toggleSound()
     end
     settings.toggle_sound = toggle_sound
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
 end
 
 -- Function to toggle SATS™
@@ -378,6 +381,8 @@ local function auto_odytargetting()
     end
 
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
+	update_display()
 end
 
 ats_mode = settings.ats_mode or 1
@@ -392,6 +397,7 @@ local function ats_mode_switch()
 
     settings.ats_mode = ats_mode
     config.save(settings)
+	if toggle_sound then windower.play_sound(sound_paths.switch) end
 end
 
 function initialization()
@@ -478,7 +484,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 			if packet['Message ID'] == 40022 then
 			   	if packet['Param 1'] == 6608 then
 					active_charge = true
-					windower.play_sound(sound_paths.charged)
+					if toggle_sound then windower.play_sound(sound_paths.charged) end
 					settings.active_charge = active_charge
 					settings:save()
 					log('RP Charge active.')
@@ -647,7 +653,7 @@ local function process_packet(packet)
 		if flags.auto_amp_grabbing_state then
 			local final_amp_count = count_moogle_amplifiers()
 			if final_amp_count >= 3 and not flags.manual_amp_grabbing_state then   -- Now, was the operation a success ?
-				windower.play_sound(sound_paths.amplifier)  -- Play my custom made sound if it was
+				if toggle_sound then windower.play_sound(sound_paths.amplifier) end -- Play my custom made sound if it was
 				windower.send_command('get "Moogle Amplifier" all')
 				log('Success')
 				coroutine.sleep(0.5)
@@ -665,7 +671,7 @@ local function process_packet(packet)
 			coroutine.sleep(2)
 			local has_moglophone_now = has_key_item(key_item_ids.Moglophone)
 			if has_moglophone_now then   -- Now, was the operation a success ?
-				windower.play_sound(sound_paths.pickup)  -- Play my custom made sound if it was
+				if toggle_sound then windower.play_sound(sound_paths.pickup) end  -- Play my custom made sound if it was
 				log('Success')
 			end
 			  -- signal the end of the procedure
@@ -681,7 +687,7 @@ local function process_packet(packet)
 				end
 			end
 			if moglophone_ii_held == 3 then
-				windower.play_sound(sound_paths.pickup)  -- Play my custom made sound if it was
+				if toggle_sound then windower.play_sound(sound_paths.pickup) end  -- Play my custom made sound if it was
 				log('Success')
 			end
 			flags.auto_II_grabbing_state = false
@@ -957,7 +963,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 			end
 		elseif p["Menu Parameters"]:unpack('b8', 1) ~= 108 and p["Menu Parameters"]:unpack('b8', 1) ~= 100 then
 			log('Congratulations on your win ! !')
-			windower.play_sound(sound_paths.win)
+			if toggle_sound then windower.play_sound(sound_paths.win) end
 			flags.busy_doing_stuff = true
 			flags.augmentation_techniques = true
 			coroutine.schedule(function() 
@@ -1131,7 +1137,7 @@ local function moglophone_alarm_handler()
 	if flags.has_moglophone == false and remaining_time < 1 and not flags.alarmDisabled and not flags.in_Odyssey_zone and not flags.auto_grabbing_in_progress and not flags.zoning then
      flags.alarmTriggered = true 
 		if not flags.auto_grabbing_in_progress and not has_moglophone_now then
-		    windower.play_sound(sound_paths.prelude)
+		    if toggle_sound then windower.play_sound(sound_paths.prelude) end
 		    log('Time to pickup Moglophone; //op silence to disable alarm')
 		    update_display()
 		end
@@ -1427,9 +1433,16 @@ function has_buff(buff_id)
 end
 
 local function get_odypro_logo()
-    local primary_color = {red = 255, green = 120, blue = 0} -- Main Orange Color
-    local highlight_color = {red = 255, green = 120, blue = 0} -- Soft Gold Highlight
+    local primary_color 
+    local highlight_color 
 
+	if auto_ody_targetting then
+		primary_color = {red = 253, green = 130, blue = 0} -- OdyPro orange™
+		highlight_color = {red = 253, green = 130, blue = 0} -- OdyPro orange™
+	else
+		primary_color = {red = 70, green = 90, blue = 70} -- Dark green
+		highlight_color = {red = 70, green = 90, blue = 70} -- Dark green
+	end
     -- Simulate a bold effect by stacking colors
     local logo_str = string.format(
         '\\cs(%d,%d,%d)Ody\\cr\\cs(%d,%d,%d)Pro\\cr',
@@ -1812,13 +1825,12 @@ windower.register_event('login', function()
 	flags.inventory_fully_loaded = false
 	coroutine.schedule(function()
 	flags.inventory_fully_loaded = true
-    end, 36)
+    end, 60)
     -- Check the player name or ID on login
     local player = windower.ffxi.get_player()
     if player and player.name ~= current_character then
-	    coroutine.sleep(2)
+	    coroutine.sleep(5)
 	    induct_data()
-		coroutine.sleep(3)
         print('Character switched from '..current_character..' to '..player.name)
 		coroutine.sleep(5)
 		current_character = player.name
@@ -2013,7 +2025,7 @@ windower.register_event('addon command', function(...)
         --------------------------------------------
 	elseif args[1] == 'charge' then
 		active_charge = true
-		windower.play_sound(sound_paths.charged)
+		if toggle_sound then windower.play_sound(sound_paths.charged) end
 		settings.active_charge = active_charge
 		settings:save()
 		log('RP Charge active.')
@@ -2333,11 +2345,11 @@ local function auto_swap_weapon_if_needed(best_type, values)
     if toggle_auto_weapon_swap and (current_main_job ~= 'PLD' and current_main_job ~= 'RUN') then
         if set_name then
 			if best_type == 'piercing' then
-				windower.play_sound(sound_paths.piercing)
+				if toggle_sound then windower.play_sound(sound_paths.piercing) end
 			elseif best_type == 'slashing' then
-				windower.play_sound(sound_paths.slashing)
+				if toggle_sound then windower.play_sound(sound_paths.slashing) end
 			elseif best_type == 'blunt' then
-				windower.play_sound(sound_paths.blunt)
+				if toggle_sound then windower.play_sound(sound_paths.blunt) end
 			end
             windower.send_command('gs c set weapons ' .. set_name)
 			--global_current_weapon = best_type
@@ -2680,7 +2692,7 @@ function target_nearest(target_names)
 
         if math.sqrt(closest.distance) <= 15 and not flags.face_target_triggered then
             flags.face_target_triggered = true
-            windower.play_sound(sound_paths.swapnrun)
+            if toggle_sound then windower.play_sound(sound_paths.swapnrun) end
             coroutine.schedule(function() face_target(closest) end, 0.6)
         end
 
@@ -2814,7 +2826,7 @@ function target_nearest_2(target_names)
 
 		if math.sqrt(closest.distance) <= 15 and not flags.face_target_triggered then
 			flags.face_target_triggered = true
-			windower.play_sound(sound_paths.swapnrun)
+			if toggle_sound then windower.play_sound(sound_paths.swapnrun) end
 			coroutine.schedule(function() face_target(closest) end, 0.6)
 		end
 
@@ -2980,14 +2992,14 @@ end)
 
 windower.register_event('load', function()
 	flags.zoning = true
-    windower.add_to_chat(207, 'Welcome to OdyPro 3.4.2 !')
+    windower.add_to_chat(207, 'Welcome to OdyPro 3.4.3 !')
     if auto_ody_targetting then
         windower.add_to_chat(207, "Auto-targetting systems online, max distance set to "..ats_max_distance..'.')
     else
         windower.add_to_chat(207, "Auto-targetting systems offline.")
     end
     windower.add_to_chat(207, 'It is strongly recommended to read over the new commands with //op help')
-	windower.play_sound(sound_paths.odyproload)
+	if toggle_sound then windower.play_sound(sound_paths.odyproload) end
 	display:show()
     coroutine.schedule(function()
 	    load_timer_from_settings()

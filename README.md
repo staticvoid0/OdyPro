@@ -1,4 +1,4 @@
-# 🧭 OdyPro v3.4.2
+# 🧭 OdyPro v3.4.3
 
 ### Mog Segment Tracker, Odyssey Target Info, and Intuitive Auto-Targeting Addon for Windower 4
 
