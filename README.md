@@ -1,6 +1,6 @@
 # 🧭 OdyPro v3.4.3
 
-### Everything Odyssey Addon for Windower 4
+### Everything Odyssey addon for Windower 4
 
 [Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.4.3main/OdyPro.zip)
 
