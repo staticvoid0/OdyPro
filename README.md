@@ -19,7 +19,7 @@
 
 **Auto-weapon-swap (AWS)**  hooks into Gearswap with Easy 1.2.3 setup.
 
-**If menu-lock ever occurs with moogle menu in rabao.**  //op unstuck   Clean. Simple. Easy. Everytime.
+**If menu-lock ever occurs with moogle menu in rabao.**    //op unstuck     Clean. Simple. Easy. Everytime.
 
 
 ## 🧾 Changelog
