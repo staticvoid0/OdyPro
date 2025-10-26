@@ -43,7 +43,8 @@ especially for multiboxers.
     //op piercing shiningone  
     //op blunt maxentius
     ```
-- AWS intelligently selects the proper damage type for each mob and sends command to change to the saved weaponmode for that damage type.
+
+  - AWS intelligently selects the proper damage type for each mob and sends command to change to the saved weaponmode for that damage type.
 - Superwarp commands can now be relayed via OdyPro. (`//op port` works!)  
 - Auto-targeting now avoids mobs using Invincible or Perfect Dodge, returning when effects wear off.  
 - Fixed sub-commands for maps and resistances (`//op map size #` now works).  
