@@ -2210,14 +2210,18 @@ local function check_zone()
         flags.in_Odyssey_zone = true
         coroutine.schedule(function()
 			induct_data()
-			zone_in_amount = settings.carryOverSegments or previous_MogSegments
+			if settings.carryOverSegments > 0 then
+				zone_in_amount = settings.carryOverSegments 
+			else
+				zone_in_amount = previous_MogSegments
+			end
 			settings.carryOverSegments = zone_in_amount
 			earned_MogSegments = previous_MogSegments - zone_in_amount
 			config.save(settings)
 			update_display()
         end, 3)
     elseif zone_id == 247 then
-		settings.carryOverSegments = nil
+		settings.carryOverSegments = 0
 		config.save(settings)
         flags.in_Rabao_zone = true
 		flags.in_Odyssey_zone = false
@@ -2226,7 +2230,7 @@ local function check_zone()
             update_display()
         end, 3)
     else
-		settings.carryOverSegments = nil
+		settings.carryOverSegments = 0
 		config.save(settings)
         flags.in_Rabao_zone = false
         flags.in_Odyssey_zone = false
@@ -2847,7 +2851,7 @@ windower.register_event('time change', function()
 end)
 -----------------------------------------------
 windower.register_event('unload', function() 
-	if flags.in_Odyssey_zone and flags.segzone and earned_MogSegments > 0 then  -- If we decided to reload OdyPro
+	if flags.in_Odyssey_zone and flags.segzone and earned_MogSegments > 0 then
 		settings.carryOverSegments = zone_in_amount
 		config.save(settings)
 	end
@@ -2868,7 +2872,7 @@ windower.register_event('zone change', function(new_id, old_id)
             coroutine.schedule(function()
 			flags.in_Odyssey_zone = false
 			zone_in_amount = nil
-			settings.carryOverSegments = nil
+			settings.carryOverSegments = 0
 			config.save(settings)
 			if flags.segzone and not flags.gaolzone then
 				windower.unregister_event(res_monitor, floor_monitor)

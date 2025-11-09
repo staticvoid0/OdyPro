@@ -2,7 +2,7 @@
 
 ### Everything Odyssey addon for Windower 4
 
-[Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.4.3main/OdyPro.zip)
+[Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.5/OdyPro.zip)
 
 - Handles Moglophone & Amplifier pickup automatically.
 - Offers optional auto-amp use inside Gaol boss chambers.
@@ -26,6 +26,9 @@
 
 ### **v3.4.3 → v3.5**
 - Revamped Auto-targeting system's trigger mechanism to make it quicker and more consistent and use less resources.
+- Revamped ATS 2.0. The user may now use //op ats  to change ATS mode to a general system that does not require mob keywords to be specified.
+this system does not have the features of ATS 1.0 which prioritize NMs over Agon mobs, however it is able to autotarget the closest mob with the highest
+HP of any name, anywhere, anytime, for now this is reset back to 1.0 when the addon is reloaded.
 - Reimplemented movement detection for automated function in rabao.
 - Major bugfixes.
 - Introduced segment counter continuity if d/c , or crash while in SegZone or reloading OdyPro to maintain instance segment counter when returning.
