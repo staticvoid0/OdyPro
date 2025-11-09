@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.4.3'
+_addon.version = '3.5'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -57,7 +57,6 @@ res = require('resources')
 resistances = require('resistances')
 types = require('types')
 local texts = require('texts')
-
 ----------------------------------------------------------------------------------------
 local addon_path = windower.addon_path
 local player_name = windower.ffxi.get_info().logged_in and windower.ffxi.get_player().name
@@ -146,7 +145,10 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
     },
 	padding = 1,
 	MogSegments_record = 0,
+	carryOverSegments = 0,
+	segs_message_id = 40012,
 	ats_max_distance = 15,
+	ats_max_height = 3,
 	moglophone_start_time = 0,
     targets = L {'agon','nostos'},
     sets = {},
@@ -182,13 +184,12 @@ local last_position = {x = 0, y = 0, z = 0}
 local thresholds = {2500, 5000, 7500, 10000, 12000}
 local entry_request = {}
 local mob_immune_status = {} 
-local amp_notifier = {}
 local flags = {}
 local timing = {}
 local amp_tools = {}
 local packets_to_send = T{}
 local last_threshold = 0
-local segs_message_id = 40012
+local segs_message_id = settings.segs_message_id or 40012
 local auto_grabbing_coroutine = nil
 local moglophone_timer = 0
 local remaining_time
@@ -200,10 +201,12 @@ local MogSegments_record = settings.MogSegments_record
 local mogdisplay = true
 local last_target = ''
 local last_target_name = ''
+local last_swapped_target = nil
 local last_npc = nil
 local last_menu = nil
 local last_npc_index = nil
 local zone_in_amount = nil
+local lasttwenty = nil
 
 flags.segzone = nil
 flags.sheolzone = nil
@@ -244,8 +247,6 @@ timing.last_update_time = 0
 timing.update_interval = 5
 timing.spam_interval = 2
 timing.last_KI_time = 0
-timing.last_switch_time = 0
-timing.cooldown_time = 2
 
 amp_tools.amp_countdown = 0
 amp_tools.amp_consumed = false
@@ -389,10 +390,10 @@ ats_mode = settings.ats_mode or 1
 local function ats_mode_switch()
     if ats_mode == 1 then
         ats_mode = 2
-        windower.add_to_chat(207, "Auto-targeting systems set to v.2.0; Prioritizing proximity > higher HP.")
+        windower.add_to_chat(207, "Auto-targeting systems set to v.2.0; Prioritizing proximity > higher HP. (Non-specific names.)")
     else
         ats_mode = 1
-        windower.add_to_chat(207, "Auto-targeting systems set to v.1.0; Prioritizing same-name mobs > higher HP > proximity.")
+        windower.add_to_chat(207, "Auto-targeting systems set to v.1.0; Prioritizing Sheol NMs > Agon > same-name mobs > higher HP > proximity. (Specified mob keywords)")
     end
 
     settings.ats_mode = ats_mode
@@ -433,7 +434,10 @@ windower.register_event('action',function (act)
 				local ability = res.monster_abilities[info]
 				if ability and (ability.en == "Invincible" or ability.en == "Perfect Dodge") then
 					mob_immune_status[maintarget.id] = true
-					target_nearest(settings.targets)
+					local current_time = os.time()
+					if selfie.status == 1 or (current_time - timing.last_disengage_time <= 3) then
+						target_nearest(settings.targets)
+					end
 					coroutine.schedule(function()
 						if mob_immune_status[maintarget.id] then
 							mob_immune_status[maintarget.id] = false
@@ -474,8 +478,6 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 end)
 
 windower.register_event('incoming chunk', function(id, data, org, modi, is_injected, is_blocked)
-	local current_time
-	---------------------------------------------------------------------------------------------
 	if not flags.in_Odyssey_zone and not flags.in_Rabao_zone then return end
 	local packet = packets.parse('incoming', data)
     if flags.in_Odyssey_zone then
@@ -518,8 +520,10 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 								earned_MogSegments = packet['Param 2'] - zone_in_amount
 							end
 					elseif segs_message_id and packet['Message ID'] ~= segs_message_id and packet['Param 2'] == previous_MogSegments + packet['Param 1'] then
-						-- This should indicate SE has added something to the currency 2 menu and we'll need to grab the new Message ID dynamically until this addon receives an update.
+						-- This should indicate SE has added something to the currency 2 menu and we'll need to grab the new Message ID dynamically until this addon receives an update. *Edit grab it dynamically and save it. No update needed.
 						segs_message_id = packet['Message ID']
+						settings.segs_message_id = segs_message_id
+						config.save(settings)
 					elseif not segs_message_id then
 						-- If previous_MogSegments matches Param 2, this could indicate we're at the start
 					
@@ -535,7 +539,6 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 			end
         end
 	elseif flags.in_Rabao_zone and not flags.zoning then
-		--current_time = os.clock()
 		if id == 0x02A and not injected then
 			if packet['Message ID'] == 45041 then
 				induct_data()
@@ -551,24 +554,25 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 			local param1 = data:unpack('I', 9)
 			local npc_id = data:unpack('I', 5)
 			local seconds_remaining
+			local extra_time
 			flags.unit_flag  = data:unpack('I', 13)
-			if npc_id == 2 and param1 > 0 and param1 <= 60 then
+			if npc_id == 2 and (flags.unit_flag == 0 and param1 > 0 and param1 <= 20) or (flags.unit_flag == 1 and param1 > 0 and param1 <= 60) then
 				if flags.unit_flag == 0 then
 					local hours_remaining = param1
+					extra_time = 0
 					seconds_remaining = hours_remaining * 3600
 					moglophone_timer = hours_remaining
 				elseif flags.unit_flag == 1 then
 					local minutes_remaining = param1
+					extra_time = 59
 					seconds_remaining = minutes_remaining * 60
 					moglophone_timer = minutes_remaining + 1
-				elseif flags.unit_flag == 2 then
-					seconds_remaining = param1
-					moglophone_timer = seconds_remaining + 59
 				end
-				if param1 > 0 then
+
+				if param1 > 0 and seconds_remaining then
 					flags.unable_to_grab = true
 					windower.play_sound(sound_paths.blank)
-					moglophone_start_time = os.time() - (72000 - (seconds_remaining + 59))  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
+					moglophone_start_time = os.time() - (72000 - (seconds_remaining + extra_time))  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
 					settings.moglophone_start_time = moglophone_start_time
 					flags.alarmDisabled = false
 					flags.alarmTriggered = false
@@ -673,6 +677,8 @@ local function process_packet(packet)
 			if has_moglophone_now then   -- Now, was the operation a success ?
 				if toggle_sound then windower.play_sound(sound_paths.pickup) end  -- Play my custom made sound if it was
 				log('Success')
+			elseif remaining_time <= 0 then
+				log('Moglophone pickup unsuccessful, please standby..')
 			end
 			  -- signal the end of the procedure
 			flags.busy_doing_stuff = false
@@ -999,7 +1005,7 @@ function release(menu_id)
     windower.packets.inject_incoming(0x052, string.char(0,0,0,0,1,0,0,0)) 
 end
 
-function moogle_resettinator(quiet)
+function moogle_resettinator()
 	local player = windower.ffxi.get_player()
 	if flags.auto_II_grabbing_state then
 		flags.action_cancellation = true
@@ -1132,7 +1138,6 @@ local function load_timer_from_settings()
 end
 
 local function moglophone_alarm_handler()
-	--local zone_identification = windower.ffxi.get_info().zone
 	local has_moglophone_now = has_key_item(key_item_ids.Moglophone)
 	if flags.has_moglophone == false and remaining_time < 1 and not flags.alarmDisabled and not flags.in_Odyssey_zone and not flags.auto_grabbing_in_progress and not flags.zoning then
      flags.alarmTriggered = true 
@@ -1147,7 +1152,7 @@ local function moglophone_alarm_handler()
 	    return
 	end
 end
---Auto Amp Grabbinationeringizationator transfunctioner.
+--Auto amp grabbinationeringizationator transfunctioner.
 function auto_amp_grabber(amps_needed)	
     if flags.auto_amp_grabbing_state or flags.busy_doing_stuff then return end -- Filter double function calls
     local player = windower.ffxi.get_player()
@@ -1483,17 +1488,18 @@ function update_display()
 
 	local time_str = update_moglophone_display()
     --------------------------------------------------------------------------------------------  
-    
-        local has_moglophone_now = has_key_item(key_item_ids.Moglophone)
-	if remaining_time <= 0 then
-        if not flags.has_moglophone and has_moglophone_now and flags.in_Rabao_zone == true then
-            -- you didn't have the moglophone, and now you do - start the timer.
-            start_moglophone_timer()
-			coroutine.schedule(function() flags.unable_to_grab = false end, 2)
-        end
+    if flags.segments_loaded_fully then
+			local has_moglophone_now = has_key_item(key_item_ids.Moglophone)
+		if remaining_time <= 0 then
+			if not flags.has_moglophone and has_moglophone_now and flags.in_Rabao_zone == true then
+				-- you didn't have the moglophone, and now you do - start the timer.
+				start_moglophone_timer()
+				coroutine.schedule(function() flags.unable_to_grab = false end, 2)
+			end
+		end
+			
+		flags.has_moglophone = has_moglophone_now
 	end
-		
-        flags.has_moglophone = has_moglophone_now
 	-----------------------------------------------------------------------------------------
     local display_str = ""
     local green_color = {
@@ -1525,7 +1531,7 @@ function update_display()
 	----------------------------Amp buff checker----------------------------------------------------
 	if flags.in_Odyssey_zone then
 	
-		if not flags.segzone and flags.gaolzone then
+		if flags.gaolzone then
 			if amp_tools.total_moogle_amps >= 1 then
 				if not has_buff(629) and not flags.zoning then
 					if moglophone_ii_count ~= inside_ody_moglophone_ii_count or (timing.attempt_number >= 1 and timing.attempt_number <= 14) then   -- We need an amp since we're inside odyssey and we've just lost a moglophone II or we've already tried to use an amp and failed.
@@ -1720,55 +1726,59 @@ local function odyssey_queue(zoneChoice)
 	elseif zoneChoice == 4 then
 		SheolInstance = "Sheol Gaol"
 	end
-	if (gaol_entry_keyitems == 3 and zoneChoice == 4) or ( can_enter_segs and (zoneChoice >= 1 and zoneChoice <= 3)) then	
-				entry_request.poke = true
-				local me,target_id,conflux_distance
-				target_id = 17789076
-				conflux_distance = windower.ffxi.get_mob_by_id(target_id).distance
-		if math.sqrt(conflux_distance) < 6 then
-				windower.add_to_chat(200, 'Requesting '..SheolInstance..' entry...')
-					local packet = packets.new('outgoing', 0x01A, {
-					["Target"]=17789076,
-					["Target Index"]=148,
-					["Category"]=0,
-					["Param"]=0,
-					["_unknown1"]=0})
-				packets.inject(packet)
-			coroutine.sleep(1.5)
-			if entry_request.response then
-					local packet = packets.new('outgoing', 0x05B)
-					packet["Target"]=17789076
-					packet["Option Index"]= zoneChoice
-					packet["_unknown1"]= 0
-					packet["Target Index"]= 148
-					packet["Automated Message"]=true
-					packet["_unknown2"]=0
-					packet["Zone"]=windower.ffxi.get_info()['zone']
-					packet["Menu ID"]=172
-				packets.inject(packet)
-			coroutine.sleep(0.5)
-					local packet = packets.new('outgoing', 0x05B)
-					packet["Target"]=17789076
-					packet["Option Index"]= zoneChoice
-					packet["_unknown1"]= 0
-					packet["Target Index"]= 148
-					packet["Automated Message"]=false
-					packet["_unknown2"]=0
-					packet["Zone"]=windower.ffxi.get_info()['zone']
-					packet["Menu ID"]=172
-				packets.inject(packet)
-			coroutine.sleep(1)
+	if gaol_entry_keyitems then
+		if (gaol_entry_keyitems == 3 and zoneChoice == 4) or ( can_enter_segs and (zoneChoice >= 1 and zoneChoice <= 3)) then	
+					entry_request.poke = true
+					local me,target_id,conflux_distance
+					target_id = 17789076
+					conflux_distance = windower.ffxi.get_mob_by_id(target_id).distance
+			if math.sqrt(conflux_distance) < 6 then
+					windower.add_to_chat(200, 'Requesting '..SheolInstance..' entry...')
+						local packet = packets.new('outgoing', 0x01A, {
+						["Target"]=17789076,
+						["Target Index"]=148,
+						["Category"]=0,
+						["Param"]=0,
+						["_unknown1"]=0})
+					packets.inject(packet)
+				coroutine.sleep(1.5)
+				if entry_request.response then
+						local packet = packets.new('outgoing', 0x05B)
+						packet["Target"]=17789076
+						packet["Option Index"]= zoneChoice
+						packet["_unknown1"]= 0
+						packet["Target Index"]= 148
+						packet["Automated Message"]=true
+						packet["_unknown2"]=0
+						packet["Zone"]=windower.ffxi.get_info()['zone']
+						packet["Menu ID"]=172
+					packets.inject(packet)
+				coroutine.sleep(0.5)
+						local packet = packets.new('outgoing', 0x05B)
+						packet["Target"]=17789076
+						packet["Option Index"]= zoneChoice
+						packet["_unknown1"]= 0
+						packet["Target Index"]= 148
+						packet["Automated Message"]=false
+						packet["_unknown2"]=0
+						packet["Zone"]=windower.ffxi.get_info()['zone']
+						packet["Menu ID"]=172
+					packets.inject(packet)
+				coroutine.sleep(1)
+				else
+					log('Unable to request entry.')
+				end
 			else
-				log('Unable to request entry.')
+				log('You are not within 6 yalms of the conflux')
 			end
-		else
-			log('You are not within 6 yalms of the conflux')
+				entry_request = {}
+		elseif (zoneChoice >= 1 and zoneChoice <= 3) and not can_enter_segs then
+			log('You do not have a moglophone to enter Seg C with.')
+		elseif (gaol_entry_keyitems ~= 3 and zoneChoice == 4) then
+			log('You have '..gaol_entry_keyitems..' Moglophone IIs unable to enter.')
 		end
-			entry_request = {}
-	elseif (zoneChoice >= 1 and zoneChoice <= 3) and not can_enter_segs then
-		log('You do not have a moglophone to enter Seg C with.')
-	elseif (gaol_entry_keyitems ~= 3 and zoneChoice == 4) then
-		log('You have '..gaol_entry_keyitems..' Moglophone IIs unable to enter.')
+	else
+		log('Moglophone IIs not loaded, try again in a min.')
 	end
 end
 
@@ -1826,15 +1836,20 @@ windower.register_event('login', function()
 	coroutine.schedule(function()
 	flags.inventory_fully_loaded = true
     end, 60)
-    -- Check the player name or ID on login
     local player = windower.ffxi.get_player()
     if player and player.name ~= current_character then
-	    coroutine.sleep(5)
-	    induct_data()
-        print('Character switched from '..current_character..' to '..player.name)
-		coroutine.sleep(5)
-		current_character = player.name
-		flags.unable_to_grab = false
+	    --coroutine.sleep(5)
+		flags.has_moglophone = true
+		flags.segments_loaded_fully = false
+		coroutine.schedule(function()
+			induct_data()
+       		print('Character switched from '..current_character..' to '..player.name)
+			flags.segments_loaded_fully = true
+			flags.zoning = false
+			current_character = player.name
+			flags.unable_to_grab = false
+		end, 10)
+		--coroutine.sleep(5)
 		--flags.busy_doing_stuff = false
 		--windower.send_command('op r')
         --current_character = player.name
@@ -1972,6 +1987,21 @@ windower.register_event('addon command', function(...)
 		settings.ats_max_distance = ats_max_distance 
 		config.save(settings)
 		log('Auto-targetting systems max distance set to '..settings.ats_max_distance..'.')
+	elseif args[1] == 'autotargetheight' or args[1] == 'ath' then
+		local value = tonumber(args[2])
+		if not value then
+			log('Please provide a valid number for autotargetheight.')
+			return
+		end
+		if value < 1 then
+			value = 1
+		elseif value > 10 then
+			value = 10
+		end
+		ats_max_height = value
+		settings.ats_max_height = value
+		config.save(settings)
+		log('Auto-targeting system max height set to ' .. value .. '.')
 	elseif args[1] == 'pickup' then
 		flags.alarmDisabled = false
 		flags.alarmTriggered = false
@@ -2009,7 +2039,7 @@ windower.register_event('addon command', function(...)
 		flags.alarmDisabled = true
         --------------------------------------------
 	elseif args[1] == 'timerreset' then
-		moglophone_start_time = os.time() - 72100--moglophone_start_time - remaining_time + (remaining_time * .001)  -- set the timer to 1min remaining and turn off alarm switches for alarm test n config.
+		moglophone_start_time = os.time() - 72100
 		settings.moglophone_start_time = moglophone_start_time
 		flags.alarmDisabled = false
 		flags.alarmTriggered = false
@@ -2041,7 +2071,7 @@ windower.register_event('addon command', function(...)
 			last_npc_index = 151
 			log('If menulock is not cleared after a few seconds, use //op unstuck2 ')
 		end
-		moogle_resettinator(true)
+		moogle_resettinator()
 		--------------------------------------------
 	elseif args[1] == 'unstuck2' then
 		if not last_npc then
@@ -2049,7 +2079,7 @@ windower.register_event('addon command', function(...)
 			last_menu = 172
 			last_npc_index = 148
 		end
-		moogle_resettinator(true)
+		moogle_resettinator()
 		log('Attempting to clear veridical conflux menu lock. unstuck2 should only be used if op gaol or op sheol was used last, otherwise use op unstuck .')
 		--------------------------
 	elseif args[1] == 'sheola' then 
@@ -2080,14 +2110,16 @@ windower.register_event('addon command', function(...)
 		windower.send_command('od 2')
 	elseif args[1] == 'p' and args[2] == '2' then 
 		windower.send_command('od p 2')
-	elseif args[1] == '3' then 
+	elseif args[1] == '3' then
 		windower.send_command('od 3')
 	elseif args[1] == 'p' and args[2] == '3' then 
 		windower.send_command('od p 3')
 	elseif args[1] == 'test' then 
 		print(flags.sheolzone)
-	elseif args[1] == 'mogtest' then 
-		print(flags.unable_to_grab)
+	elseif args[1] == 'gaoltest' then 
+		print(flags.gaolzone)
+	elseif args[1] == 'movetest' then 
+		print(flags.is_standing_still)
     elseif args[1]  == 'slashing' or args[1] == 'piercing' or args[1] == 'blunt' then
         if args[2] == '' then
             windower.add_to_chat(123, '[OdyPro] Current ' .. args[1] .. ' set: ' .. tostring(settings.job_weapon_sets[current_main_job][args[1]]))
@@ -2099,7 +2131,7 @@ windower.register_event('addon command', function(...)
     elseif args[1] == 'help' then
         windower.add_to_chat(207, 'OdyPro help:')
         windower.add_to_chat(206, '-------------C O M M A N D  L I S T-------------')
-        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
+        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
         windower.add_to_chat(206, '-----C O M M A N D S   E X P L A N A T I O N----')
         windower.add_to_chat(207, '- reset : sets the Instance Mog Segments to 0 and updates the display.')
         windower.add_to_chat(207, '- togglesound / ts: toggle sound effects off and on (on by default).')
@@ -2125,6 +2157,7 @@ windower.register_event('addon command', function(...)
         windower.add_to_chat(207, '- target / t: scans and targets nearest mob specified with the add command')
         windower.add_to_chat(207, '- autotarget / at: toggles auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetdistance / atd # : sets the max yalms for the auto-targetting system.')
+		windower.add_to_chat(207, '- autotargetheight / ath # : sets the max height in yalms for the auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetsystem / ats : toggles between V.1 and V.2 auto-targetting systems (V1 is best all around atm.)')
 		--------------------------A U T O - W E A P O N S W A P - C O M M A N D S-----------------------------------------------
 		windower.add_to_chat(206, '------A U T O - W E A P O N S W A P - C O M M A N D S  ------')
@@ -2171,17 +2204,21 @@ update_display()
 local function check_zone()
 	local zone_id = windower.ffxi.get_info().zone
     if zone_id == 279 or zone_id == 298 then
+		coroutine.sleep(2)
+		last_threshold = 0
+		windower.send_command('op reset')
         flags.in_Odyssey_zone = true
         coroutine.schedule(function()
-            update_display()
-            induct_data()
-        end, 2)
-        coroutine.schedule(function()
-			if not flags.sheolzone then
-			flags.gaolzone = true
-			end
-        end, 10)
+			induct_data()
+			zone_in_amount = settings.carryOverSegments or previous_MogSegments
+			settings.carryOverSegments = zone_in_amount
+			earned_MogSegments = previous_MogSegments - zone_in_amount
+			config.save(settings)
+			update_display()
+        end, 3)
     elseif zone_id == 247 then
+		settings.carryOverSegments = nil
+		config.save(settings)
         flags.in_Rabao_zone = true
 		flags.in_Odyssey_zone = false
 		coroutine.schedule(function()
@@ -2189,30 +2226,16 @@ local function check_zone()
             update_display()
         end, 3)
     else
+		settings.carryOverSegments = nil
+		config.save(settings)
         flags.in_Rabao_zone = false
         flags.in_Odyssey_zone = false
     end
 end
 
 function set_up_entry()
-	--if not flags.gaolzone then
-    -- initiate running functions
 		res_monitor = windower.register_event('target change', print_resistances)
 		floor_monitor = windower.register_event('outgoing chunk', watch_floor_change)
-	--end
-end
-
-function watch_for_entry(id, data, modified, injected, blocked)
-    -- the rabao conflux will send an NPC interaction with our character upon/before zoning that tells us the zone we'll be in (A/B/C/Gaol)
-    if id == 0x034 and not injected then
-        local packet = packets.parse('incoming', data)
-        if packet['Menu ID'] == 173 and packet['NPC'] == windower.ffxi.get_player().id then
-            local i = packet['Menu Parameters']:unpack('i', 1)
-            flags.sheolzone = i < 4 and i > 0 and i or nil
-			flags.gaolzone = i == 4 or nil
-			flags.segzone = flags.sheolzone
-        end
-    end
 end
 
 local weapon_cache = {
@@ -2275,12 +2298,7 @@ local function auto_swap_weapon_if_needed(best_type, values)
 	if not best_type or not values then return end
     local preferred_valid = nil
 	local current_main_job = windower.ffxi.get_player().main_job
-	--if not global_current_weapon then
 	local current = get_current_weapon_type()
-		--global_current_weapon = current
-	--else
-		--current = global_current_weapon
-	--end
     if not current then return end
 
     -- If current already matches best, no swap
@@ -2362,7 +2380,6 @@ local function auto_swap_weapon_if_needed(best_type, values)
 end
 
 function build_res_strings(target, target_index)
-    if flags.gaolzone then return end
     local name = target.name
     local family = (name:find('Nostos') or name:find('Agon')) and name:gsub('^%a+%s', '') or name
     local res_string = ''
@@ -2380,7 +2397,7 @@ function build_res_strings(target, target_index)
     -- skip if data not found
     if not resistances[family] or not types[type] then
 	local msg = string.format("[Resistances] Missing data for family '%s' (type=%s)", tostring(family), tostring(type))
-		windower.add_to_chat(123, msg)
+		--windower.add_to_chat(123, msg)
 		flags.resistance_intel = false
 		missing_log:append(msg.."\n")
         res_box:hide()
@@ -2452,7 +2469,6 @@ function build_res_strings(target, target_index)
 end
 
 function print_resistances(target_index)
-    if flags.gaolzone then windower.unregister_event(res_monitor, floor_monitor) return end
 	if settings.res_box.show then
         local target = windower.ffxi.get_mob_by_index(target_index)
         local is_halo = target and target.name:contains('Halo')
@@ -2477,73 +2493,6 @@ function print_resistances(target_index)
 	else
 		local target = windower.ffxi.get_mob_by_index(target_index)
 		last_target_name = target.name
-    end
-end
-
-function watch_floor_change(id, data, modified, injected, blocked)  
-   local current_time = os.clock()
-    if id == 0x05B and current_time - timing.last_floorcheck_time > 4 then 
-
-        local packet = packets.parse('outgoing', data)
-        local new_floor
-
-        -- conflux menu was used
-        if tostring(packet):contains('Conflux') then
-            -- even numbered confluxes always teleport one floor down where that floor equals the confluxes number divided by two
-            if packet['Option Index'] % 2 == 0 then
-                new_floor = packet['Option Index'] / 2 == 0 and 1 or packet['Option Index'] / 2
-                -- odd numbered confluxes always teleport one floor up
-            else
-                -- store lowest floor
-                local f = 1
-                -- loop over odd conflux values
-                for i = 1, 11, 2 do
-                    -- increase floor by one each step
-                    f = f + 1
-                    -- stop at actual conflux that was used
-                    if i == packet['Option Index'] then
-                        new_floor = f
-                        break
-                    end
-                end
-            end
-
-            -- translocator menu was used
-        elseif tostring(packet):contains('Translocator') then
-            -- 'option index' is the translocator that was warped to, corresponding floors are known values
-            new_floor = translocators[flags.sheolzone][packet['Option Index']]
-        end
-
-        if new_floor then
-            map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-' .. new_floor .. '.png')
-			timing.last_floorcheck_time = os.clock()
-        end
-    end
-end
-
-function set_sheolzone_inside(id, data, modified, injected, blocked)
-	-- checking any NPC update in range while flags.sheolzone is not set
-    if id == 0x00E and not injected then
-
-        local packet = packets.parse('incoming', data)
-        local sender = windower.ffxi.get_mob_by_index(packet['Index']) and windower.ffxi.get_mob_by_index(packet['Index']).spawn_type or nil
-
-        if sender and sender == 16 or sender == 2 then
-            -- grab unique instance bit
-            local instance = bit.band(bit.rshift(windower.ffxi.get_mob_by_index(packet['Index']).id, 12), 0xFFF)
-            -- find out if current instance is Sheol A, B or C
-            for k, v in pairs(instances) do
-                if table.find(v, instance) then
-                    flags.sheolzone = k
-					flags.segzone = flags.sheolzone
-                    map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
-                    set_up_entry()
-                    break
-                end
-            end
-            -- stop all of this from firing over and over again since we now know what instance we are in
-            windower.unregister_event(sheolzone_fetcher)
-        end
     end
 end
 
@@ -2614,7 +2563,7 @@ function target_nearest(target_names)
 
         for _, mob in pairs(mobs) do
             if mob.valid_target and mob.hpp > 0 and math.sqrt(mob.distance) <= ats_max_distance then
-                if math.abs(mob.z - player_mob.z) <= 3 then
+                if math.abs(mob.z - player_mob.z) <= settings.ats_max_height then
                     within_height = true
                     local mob_name = mob.name:lower()
 				
@@ -2656,7 +2605,6 @@ function target_nearest(target_names)
         end
 
         local closest = nm_target or agon_target or fallback_target
-
         if not closest then
             if not within_height then
                 windower.add_to_chat(166, 'Target found within distance limit, but beyond the height threshold.')
@@ -2667,13 +2615,10 @@ function target_nearest(target_names)
             flags.mobAlreadyTargetted = false
             return
         end
-			--if not flags.in_Odyssey_zone then
-				--last_target_name = closest.name
-			--end
+			if not flags.in_Odyssey_zone then
+				last_target_name = closest.name
+			end
 			
-        -- Engage target
-        local current_engage_time = os.time()
-        if (player.status == 1 or player.status == 2) or (current_engage_time - timing.last_disengage_time <= 3) then
             windower.add_to_chat(207, 'Switching target...')
             local p = packets.new('outgoing', 0x01A)
             p['Target'] = closest.id
@@ -2688,7 +2633,6 @@ function target_nearest(target_names)
             local p2 = packets.new('outgoing', 0x016)
             p2['Target Index'] = closest.index
             packets.inject(p2)
-        end
 
         if math.sqrt(closest.distance) <= 15 and not flags.face_target_triggered then
             flags.face_target_triggered = true
@@ -2706,9 +2650,10 @@ function target_nearest(target_names)
     flags.mobAlreadyTargetted = false
 end
 
---The alternate auto-targeting-system: Prioritizes proximity over higher HP. 
+--The alternate auto-targeting-system: Targets the closest highest HP mob of any name.
 math.randomseed(os.time() + windower.ffxi.get_player().id)
-function target_nearest_2(target_names)
+
+function target_nearest_2()
 	local player = windower.ffxi.get_player()
 	local player_mob = windower.ffxi.get_mob_by_id(player.id)
 	local within_height = false
@@ -2721,28 +2666,11 @@ function target_nearest_2(target_names)
 		local mobs = windower.ffxi.get_mob_array()
 		local closest
 		local prioritize_agon = true
-		local mob_keywords = {
-			'asena', 'steward', 'dabbat',
-			'lotanu', 'bygul', 'kurmajara', 'wayra tata'
-		}
-		-- First pass: look only for 'Agon' mobs
-		for _, mob in pairs(mobs) do
-			if mob.valid_target and mob.hpp > 0 and math.sqrt(mob.distance) <= ats_max_distance then
-				if math.abs(mob.z - player_mob.z) <= 3 then
-					within_height = true
+		if not closest then
+			for _, mob in pairs(mobs) do
+				if mob.valid_target and mob.hpp > 0 and mob.spawn_type == 16 and math.sqrt(mob.distance) <= ats_max_distance then
+					if math.abs(mob.z - player_mob.z) <= 3 then
 					local mob_name = mob.name:lower()
-					local matched = false
-					for _, keyword in ipairs(mob_keywords) do
-						if mob_name:find(keyword) then
-							matched = true
-							break
-						end
-					end
-					if matched and not has_immune_buff(mob) then
-						if not closest then
-							closest = mob
-						end
-					elseif string.find(mob.name:lower(), 'agon') and not has_immune_buff(mob) then
 						if not closest then
 							closest = mob
 						else
@@ -2759,42 +2687,6 @@ function target_nearest_2(target_names)
 			end
 		end
 
-		-- Second pass: fallback to normal target_names if no Agon mob found
-		if not closest then
-			for _, mob in pairs(mobs) do
-				if mob.valid_target and mob.hpp > 0 and math.sqrt(mob.distance) <= ats_max_distance then
-					if math.abs(mob.z - player_mob.z) <= 3 then
-					local mob_name = mob.name:lower()
-						for _, target_name in ipairs(target_names) do
-							if string.find(mob.name:lower(), target_name:lower()) then
-							  local same_name_bonus = (last_target_lower and mob_name == last_target_lower)
-								if not closest then
-									closest = mob
-								elseif same_name_bonus then
-									same_name_present = true
-									if mob.hpp == 100 and mob.distance <= (closest.distance + 5) then
-										closest = mob
-									elseif mob.hpp >= 90 and mob.distance <= (closest.distance + 2.5) then
-										closest = mob
-									elseif mob.hpp >= 75 and mob.distance < closest.distance then
-										closest = mob
-									end
-								elseif not same_name_present then
-									if mob.hpp == 100 and mob.distance <= (closest.distance + 5) then
-										closest = mob
-									elseif mob.hpp >= 90 and mob.distance <= (closest.distance + 2.5) then
-										closest = mob
-									elseif mob.hpp >= 75 and mob.distance < closest.distance then
-										closest = mob
-									end
-								end
-							end
-						end	
-					end
-				end
-			end
-		end
-
 		if not closest then
 			if not within_height then
 				windower.add_to_chat(205, 'Target found within distance limit, but beyond the height threshold.')
@@ -2804,32 +2696,27 @@ function target_nearest_2(target_names)
 			flags.mobAlreadyTargetted = false
 			return
 		end
-		--last_target_name = closest.name
 
-		local current_engage_time = os.time()
-		if (player.status == 1 or player.status == 2) or (current_engage_time - timing.last_disengage_time <= 3) then
-					    windower.add_to_chat(207, 'Switching target...')
-			local p = packets.new('outgoing', 0x01A)
-			p['Target'] = closest.id
-			p['Target Index'] = closest.index
-			p['Category'] = 0x0F
-			p['Param'] = 0
-			p['X Offset'] = 0
-			p['Z Offset'] = 0
-			p['Y Offset'] = 0
-			packets.inject(p)
+		windower.add_to_chat(207, 'Switching target...')
+		local p = packets.new('outgoing', 0x01A)
+		p['Target'] = closest.id
+		p['Target Index'] = closest.index
+		p['Category'] = 0x0F
+		p['Param'] = 0
+		p['X Offset'] = 0
+		p['Z Offset'] = 0
+		p['Y Offset'] = 0
+		packets.inject(p)
 
-			local p2 = packets.new('outgoing', 0x016)
-			p2['Target Index'] = closest.index
-			packets.inject(p2)
-		end
-
+		local p2 = packets.new('outgoing', 0x016)
+		p2['Target Index'] = closest.index
+		packets.inject(p2)
+		
 		if math.sqrt(closest.distance) <= 15 and not flags.face_target_triggered then
 			flags.face_target_triggered = true
 			if toggle_sound then windower.play_sound(sound_paths.swapnrun) end
 			coroutine.schedule(function() face_target(closest) end, 0.6)
 		end
-
 		if not flags.face_target_triggered then
 			coroutine.sleep(0.2)
 			windower.ffxi.run(false)
@@ -2837,75 +2724,109 @@ function target_nearest_2(target_names)
 			windower.ffxi.run(false)
 		end
 	end
-
 	flags.mobAlreadyTargetted = false
 end
 
-function check_standing_still()
-    local player = windower.ffxi.get_info().logged_in and windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
-    if not player then return end
-
-    -- Get current position
-    local current_position = {x = player.x, y = player.y, z = player.z}
-
-    -- Check if the player has moved
-    if math.abs(current_position.x - last_position.x) > 0.01 or
-       math.abs(current_position.y - last_position.y) > 0.01 or
-       math.abs(current_position.z - last_position.z) > 0.01 then
-        -- Player has moved
-        last_position = current_position
-        timing.last_move_time = os.clock()
-        flags.is_standing_still = false
-		if flags.busy_doing_stuff and not flags.augmentation_techniques then  -- since we have moved we know that we're no longer in a menu; Re-enable automated moogle interactions
-			flags.busy_doing_stuff = false
+windower.register_event('prerender', function()
+	if auto_ody_targetting then
+		local player = windower.ffxi.get_player()
+		if player and player.vitals.hp == 0 then return end   --  We dont want this firing over and over while we're dead.
+		if player and player.status == 1 then
+			timing.last_disengage_time = os.time()  -- hand the time to our last engaged timing check
 		end
-    else
-        -- Check how long been still
-        if os.clock() - timing.last_move_time > 5 then
-            flags.is_standing_still = true
+		local current_target = windower.ffxi.get_mob_by_target('t')
+		--if current_target and current_target.hpp ~= 0 then return end 
+		local current_engage_time = os.time()
+			if current_target and current_target.id ~= last_swapped_target then
+				-- If the current target is dead and we have been engaged within the last 3 seconds, switch to the next target
+				if current_target and current_target.hpp == 0 and current_engage_time - timing.last_disengage_time <= 3 then
+					if flags.targettingMessageDisplayed == nil then
+						flags.targettingMessageDisplayed = true					
+						-- Switch to the nearest target and update the last switch time
+						if ats_mode == 1 then
+							last_swapped_target = current_target.id
+							windower.add_to_chat(207, 'Scanning for specified targets...')
+							target_nearest(settings.targets)
+						elseif ats_mode == 2 then
+							last_swapped_target = current_target.id
+							windower.add_to_chat(207, 'Scanning for targets...')
+							target_nearest_2()
+						end
+						flags.targettingMessageDisplayed = nil
+					end
+				end
+			end
+		-----------------------------------------------------------------------
+
+	end
+end)
+-------------------------------------------
+function watch_floor_change(id, data, modified, injected, blocked)  
+   local current_time = os.clock()
+    if id == 0x05B and current_time - timing.last_floorcheck_time > 4 then 
+
+        local packet = packets.parse('outgoing', data)
+        local new_floor
+
+        -- conflux menu was used
+        if tostring(packet):contains('Conflux') then
+            -- even numbered confluxes always teleport one floor down where that floor equals the confluxes number divided by two
+            if packet['Option Index'] % 2 == 0 then
+                new_floor = packet['Option Index'] / 2 == 0 and 1 or packet['Option Index'] / 2
+                -- odd numbered confluxes always teleport one floor up
+            else
+                -- store lowest floor
+                local f = 1
+                -- loop over odd conflux values
+                for i = 1, 11, 2 do
+                    -- increase floor by one each step
+                    f = f + 1
+                    -- stop at actual conflux that was used
+                    if i == packet['Option Index'] then
+                        new_floor = f
+                        break
+                    end
+                end
+            end
+
+            -- translocator menu was used
+        elseif tostring(packet):contains('Translocator') then
+            -- 'option index' is the translocator that was warped to, corresponding floors are known values
+            new_floor = translocators[flags.sheolzone][packet['Option Index']]
+        end
+
+        if new_floor then
+            map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-' .. new_floor .. '.png')
+			timing.last_floorcheck_time = os.clock()
         end
     end
 end
 
-windower.register_event('prerender', function()
-    local current_engage_time = os.time()
-    local player = windower.ffxi.get_player()
-	local targetter_current_time = os.clock()
-	----------------------------------------------------
-    if flags.in_Rabao_zone then
-	    check_standing_still()
-	end
-    if targetter_current_time - timing.last_switch_time < timing.cooldown_time then
-        return -- If we're still within the cooldown, don't do anything
-    end
-    if player and (player.status == 1 or player.status == 2) then
-		timing.last_disengage_time = os.time()
-	end
-    local current_target = windower.ffxi.get_mob_by_target('t')
-
-    -- If the current target is dead, switch to the next target
-
-	if player and player.vitals.hp == 0 then return end   --  We dont want this firing over and over while we're dead.
-        if current_target and current_target.hpp == 0 and auto_ody_targetting and (current_engage_time - timing.last_disengage_time <= 3) and player.vitals.hp ~= 0 then
-	        if flags.targettingMessageDisplayed == nil then
-			    windower.add_to_chat(207, 'Scanning for specified targets...')
-			    flags.targettingMessageDisplayed = true
-		    end
-
-        -- Switch to the nearest target and update the last switch time
-	    	if ats_mode == 1 then
-                 target_nearest(settings.targets)
-                 timing.last_switch_time = os.clock() -- Update the last switch time
-		    elseif ats_mode == 2 then
-                target_nearest_2(settings.targets)
-                timing.last_switch_time = os.clock() -- Update the last switch time
+function set_sheolzone_inside(id, data, modified, injected, blocked)
+    if id == 0x00E and not injected then
+        local packet = packets.parse('incoming', data)
+        local sender = windower.ffxi.get_mob_by_index(packet['Index']) and windower.ffxi.get_mob_by_index(packet['Index']).spawn_type or nil
+        if sender and sender == 16 or sender == 2 then
+            local instance = bit.band(bit.rshift(windower.ffxi.get_mob_by_index(packet['Index']).id, 12), 0xFFF)
+            for k, v in pairs(instances) do
+                if table.find(v, instance) then
+                    flags.sheolzone = k
+					flags.segzone = flags.sheolzone
+					--print(flags.sheolzone and "Setting sheolzone inside to :"..flags.sheolzone)
+					map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
+					set_up_entry()
+                    break
+                end
+            end
+			if not flags.sheolzone or flags.sheolzone > 3 then
+				inside_ody_moglophone_ii_count = 3
+				flags.gaolzone = true
 			end
+            windower.unregister_event(sheolzone_fetcher)
         end
-	
-    -----------------------------------------------------------------------
-	flags.targettingMessageDisplayed = nil
-end)
--------------------------------------------
+    end
+end
+
 
 windower.register_event('time change', function()
    if not flags.auto_grabbing_in_progress and not flags.auto_II_grabbing_in_progress and not flags.auto_amp_grabbing_in_progress then
@@ -2926,12 +2847,15 @@ windower.register_event('time change', function()
 end)
 -----------------------------------------------
 windower.register_event('unload', function() 
+	if flags.in_Odyssey_zone and flags.segzone and earned_MogSegments > 0 then  -- If we decided to reload OdyPro
+		settings.carryOverSegments = zone_in_amount
+		config.save(settings)
+	end
 	save_record()
 end)
 
 windower.register_event('zone change', function(new_id, old_id)
 	flags.zoning = true
-	amp_notifier = {}
 	inside_ody_moglophone_ii_count = 3
 	weapon_cache.skill = nil
     weapon_cache.name = nil
@@ -2944,7 +2868,10 @@ windower.register_event('zone change', function(new_id, old_id)
             coroutine.schedule(function()
 			flags.in_Odyssey_zone = false
 			zone_in_amount = nil
+			settings.carryOverSegments = nil
+			config.save(settings)
 			if flags.segzone and not flags.gaolzone then
+				windower.unregister_event(res_monitor, floor_monitor)
 				log('Total haul: ' .. earned_MogSegments)
 			end
 			flags.segzone = nil
@@ -2953,35 +2880,18 @@ windower.register_event('zone change', function(new_id, old_id)
 			end, 3)
         end
         if new_id == 247 then
-            rabao_monitor = windower.register_event('incoming chunk', watch_for_entry)
             flags.in_Rabao_zone = true
             update_display()
         elseif old_id == 247 and (new_id == 298 or new_id == 279) then
-			coroutine.schedule(function()
-				if not flags.sheolzone or flags.sheolzone > 3 then
-				flags.gaolzone = true
-				end
-			end, 10)
-            coroutine.sleep(1)
+		    coroutine.sleep(1)
             last_threshold = 0
             windower.send_command('op reset')
 			flags.in_Odyssey_zone = true
             induct_data()
 			zone_in_amount = previous_MogSegments
-            if flags.sheolzone then
-                set_up_entry()
-                map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
-            else
-                sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
-            end
-        end
-		
-        if flags.sheolzone and (old_id == 298 or old_id == 279) then
-            windower.unregister_event(res_monitor, floor_monitor)
-        end
-		
-        if rabao_monitor and old_id == 247 then
-            windower.unregister_event(rabao_monitor)
+			settings.carryOverSegments = zone_in_amount
+			config.save(settings)
+			sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
         end
         if old_id == 247 then
             flags.in_Rabao_zone = false
@@ -2992,7 +2902,7 @@ end)
 
 windower.register_event('load', function()
 	flags.zoning = true
-    windower.add_to_chat(207, 'Welcome to OdyPro 3.4.3 !')
+    windower.add_to_chat(207, 'Welcome to OdyPro 3.5 !')
     if auto_ody_targetting then
         windower.add_to_chat(207, "Auto-targetting systems online, max distance set to "..ats_max_distance..'.')
     else
@@ -3012,11 +2922,9 @@ windower.register_event('load', function()
     end, 4)
     coroutine.schedule(function()
 		flags.inventory_fully_loaded = true
-    end, 20)
+    end, 30)
     if windower.ffxi.get_info().zone == 298 or windower.ffxi.get_info().zone == 279 then
         sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
-    elseif windower.ffxi.get_info().zone == 247 then
-        rabao_monitor = windower.register_event('incoming chunk', watch_for_entry)
     end
     local player = windower.ffxi.get_player()
     if player then
@@ -3024,32 +2932,51 @@ windower.register_event('load', function()
     end
 end)
 
--- Handles some of the automated interaction manual-overriding
+-- Handles movement detection and some of the automated interaction manual-overriding
 windower.register_event('outgoing chunk',function(id,data,modified,injected,blocked)
-  if flags.in_Rabao_zone then 
-    if id == 0x01A and not injected then 
-		local p = packets.parse('outgoing', data)
-		if p["Target"] == 17789079 or p["Target"] == 17789076 then
-			flags.busy_doing_stuff = true
-		end
-			if (flags.auto_grabbing_in_progress or flags.auto_II_grabbing_in_progress or flags.auto_amp_grabbing_in_progress) then 
-				if not flags.action_cancellation then
-					if flags.auto_amp_grabbing_state or flags.auto_grabbing_state or flags.auto_II_grabbing_state then
-						moogle_resettinator(true)
-						coroutine.sleep(1)
-						return false
+	if flags.in_Rabao_zone then
+		if id == 0x015 then
+			-- Use 'data' instead of 'modified' here
+			local currenttwenty = {
+				X = data:sub(5, 8),
+				Y = data:sub(13, 16),
+			}
+
+			local moving = not lasttwenty
+				or currenttwenty.X ~= lasttwenty.X
+				or currenttwenty.Y ~= lasttwenty.Y
+			if moving then
+				timing.last_move_time = os.clock()
+			end
+			lasttwenty = currenttwenty
+			if os.clock() - timing.last_move_time > 2 then
+				flags.is_standing_still = true
+			else
+				flags.is_standing_still = false
+			end
+		elseif id == 0x01A and not injected then
+			local p = packets.parse('outgoing', data)
+			if p["Target"] == 17789079 or p["Target"] == 17789076 then
+				flags.busy_doing_stuff = true
+			end
+				if (flags.auto_grabbing_in_progress or flags.auto_II_grabbing_in_progress or flags.auto_amp_grabbing_in_progress) then 
+					if not flags.action_cancellation then
+						if flags.auto_amp_grabbing_state or flags.auto_grabbing_state or flags.auto_II_grabbing_state then
+							moogle_resettinator()
+							coroutine.sleep(1)
+							return false
+						end
 					end
 				end
+		elseif id == 0x05B and not injected then
+			local p = packets.parse('outgoing', data)
+			if p["_unknown1"] == 16384 and flags.busy_doing_stuff then
+				flags.busy_doing_stuff = false
+			elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["_unknown1"] == 0 and p["Menu ID"] == 2001 and p["Automated Message"] == false and flags.busy_doing_stuff then
+				flags.busy_doing_stuff = false
+			elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["Menu ID"] == 2005 and p["Automated Message"] == false and flags.busy_doing_stuff then
+				flags.busy_doing_stuff = false
 			end
-	elseif id == 0x05B and not injected then
-		local p = packets.parse('outgoing', data)
-		if p["_unknown1"] == 16384 and flags.busy_doing_stuff then
-			flags.busy_doing_stuff = false
-		elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["_unknown1"] == 0 and p["Menu ID"] == 2001 and p["Automated Message"] == false and flags.busy_doing_stuff then
-			flags.busy_doing_stuff = false
-		elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["Menu ID"] == 2005 and p["Automated Message"] == false and flags.busy_doing_stuff then
-			flags.busy_doing_stuff = false
 		end
-    end
-  end
+	end
 end)

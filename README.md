@@ -1,4 +1,4 @@
-# 🧭 OdyPro v3.4.3
+# 🧭 OdyPro v3.5
 
 ### Everything Odyssey addon for Windower 4
 
@@ -23,6 +23,12 @@
 
 
 ## 🧾 Changelog
+
+### **v3.4.3 → v3.5**
+- Revamped Auto-targeting system's trigger mechanism to make it quicker and more consistent and use less resources.
+- Reimplemented movement detection for automated function in rabao.
+- Major bugfixes.
+- Introduced segment counter continuity if d/c , or crash while in SegZone or reloading OdyPro to maintain instance segment counter when returning.
 
 ### **v3.4.1 → v3.4.3**
 - Added auto moglophone timer setting. You no longer need to have had OdyPro loaded when picking up moglophone for the timer to be set.
