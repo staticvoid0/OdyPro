@@ -27,9 +27,9 @@
 ### **v3.4.3 → v3.5**
 - Revamped Auto-targeting system's trigger mechanism to make it quicker and more consistent and use less resources.
 - Revamped ATS 2.0. The user may now use //op ats  to change ATS mode to a general system that does not require mob keywords to be specified.
-this system does not have the features of ATS 1.0 which prioritize NMs over Agon mobs, however it is able to autotarget the closest mob with the highest
-HP of any name, anywhere, anytime, for now this is reset back to 1.0 when the addon is reloaded.
-- Reimplemented movement detection for automated function in rabao.
+this system does not have the features of ATS 1.0 which prioritizes NMs over Agon mobs and Agon over Nostos or other specified mobs, however
+it is able to autotarget the closest mob with the highest HP of any name, anywhere, anytime, for now this is reset back to 1.0 when the addon is reloaded.
+- Reimplemented movement detection for automated functions in rabao, resource cost reduction.
 - Major bugfixes.
 - Introduced segment counter continuity if d/c , or crash while in SegZone or reloading OdyPro to maintain instance segment counter when returning.
 

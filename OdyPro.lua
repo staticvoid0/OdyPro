@@ -264,9 +264,11 @@ end
 if not settings.toggle_auto_amp then
 	settings.toggle_auto_amp = true
 end
-if settings.ats_mode == 2 then
-	settings.ats_mode = 1
+
+if settings.ats_mode == 1 then
+	settings.ats_mode = 2
 end
+
 config.save(settings)
 -----------------------------------------------------------------------------------------
 
@@ -374,7 +376,13 @@ auto_ody_targetting = settings.auto_ody_targetting
 local function auto_odytargetting()
     auto_ody_targetting = not auto_ody_targetting
     if auto_ody_targetting then
-        windower.add_to_chat(207, "Auto-targetting systems online, max distance set to "..settings.ats_max_distance..'.')
+		local system_mode
+		if ats_mode == 1 then
+			system_mode = "(Focused)"
+		elseif ats_mode == 2 then
+			system_mode = "(General)"
+		end
+        windower.add_to_chat(207, "Auto-targetting systems online "..system_mode..", Max distance set to "..ats_max_distance..', max height set to '..settings.ats_max_height..'.')
         settings.auto_ody_targetting = true
     else
         windower.add_to_chat(207, "Auto-targetting systems offline.")
@@ -382,7 +390,7 @@ local function auto_odytargetting()
     end
 
     config.save(settings)
-	if toggle_sound then windower.play_sound(sound_paths.switch) end
+	if toggle_sound and not flags.zoning then windower.play_sound(sound_paths.switch) end
 	update_display()
 end
 
@@ -390,15 +398,15 @@ ats_mode = settings.ats_mode or 1
 local function ats_mode_switch()
     if ats_mode == 1 then
         ats_mode = 2
-        windower.add_to_chat(207, "Auto-targeting systems set to v.2.0; Prioritizing proximity > higher HP. (Non-specific names.)")
+        windower.add_to_chat(207, "Auto-targeting systems set to (General); Targeting proximity > higher HP. (Non-specific names)")
     else
         ats_mode = 1
-        windower.add_to_chat(207, "Auto-targeting systems set to v.1.0; Prioritizing Sheol NMs > Agon > same-name mobs > higher HP > proximity. (Specified mob keywords)")
+        windower.add_to_chat(207, "Auto-targeting systems set to (Focused); Targeting Sheol NMs > Agon > same-name mobs > higher HP > proximity. (Specified mob keywords)")
     end
 
     settings.ats_mode = ats_mode
     config.save(settings)
-	if toggle_sound then windower.play_sound(sound_paths.switch) end
+	if toggle_sound and not flags.zoning then windower.play_sound(sound_paths.switch) end
 end
 
 function initialization()
@@ -479,6 +487,7 @@ end)
 
 windower.register_event('incoming chunk', function(id, data, org, modi, is_injected, is_blocked)
 	if not flags.in_Odyssey_zone and not flags.in_Rabao_zone then return end
+	if flags.zoning then return end
 	local packet = packets.parse('incoming', data)
     if flags.in_Odyssey_zone then
 		------------------RP Charge tools--------------------------------
@@ -506,7 +515,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
             if initial_checkthrough == true and not segs_message_id then
                 induct_data()
             end
-			if not flags.zoning and flags.segzone then
+			if flags.segzone then
 				-- Only process if Param 1 and Param 2 exist
 				if packet['Param 2'] and packet['Param 1'] then
 					if segs_message_id and packet['Message ID'] == segs_message_id and previous_MogSegments ~= packet['Param 2'] then
@@ -535,6 +544,14 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 						-- Ensure segs_message_id is not nil before comparing
 					end
 					update_display()
+				end
+			elseif packet['Param 2'] and packet['Param 1'] then
+				if segs_message_id and packet['Message ID'] == segs_message_id then
+					print("Backup check in 2A parse set segzone flag")
+					flags.segzone = true
+					if not sheolzone_fetcher then
+						sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
+					end
 				end
 			end
         end
@@ -1608,9 +1625,9 @@ function update_display()
 			end
 		end
 		------------------------Auto-Moglophone grabbing machinery---------------------------------
-		if not flags.zoning and not flags.busy_doing_stuff then
+		if flags.has_moglophone == false and remaining_time < 1 and flags.in_Rabao_zone then
 			if not flags.auto_grabbing_in_progress and not flags.auto_II_grabbing_in_progress and not flags.auto_amp_grabbing_in_progress then
-				if flags.has_moglophone == false and remaining_time < 1 and flags.in_Rabao_zone then
+				if not flags.zoning and not flags.busy_doing_stuff then
 					mob = windower.ffxi.get_mob_by_id(target_id)
 					if mob and mob.distance then
 						moogle_distance = math.sqrt(mob.distance)
@@ -1629,13 +1646,11 @@ function update_display()
 		-------------------------------------------------------------------------------------------
 		------------------------Auto-moglophone II Grabbing machinery------------------------------
 		gaol_entry_keyitems = moglophone_ii_count
-		if not flags.zoning then
+		if ((gaol_entry_keyitems == 2 and previous_MogSegments >= 3000) or
+			(gaol_entry_keyitems == 1 and previous_MogSegments >= 6000) or
+			(gaol_entry_keyitems == 0 and previous_MogSegments >= 9000)) then
 			if not flags.auto_grabbing_in_progress and not flags.auto_II_grabbing_in_progress and not flags.auto_amp_grabbing_in_progress then
-				if flags.in_Rabao_zone and flags.is_standing_still and
-				   ((gaol_entry_keyitems == 2 and previous_MogSegments >= 3000) or
-					(gaol_entry_keyitems == 1 and previous_MogSegments >= 6000) or
-					(gaol_entry_keyitems == 0 and previous_MogSegments >= 9000)) then
-					
+				if flags.is_standing_still then
 					mob = windower.ffxi.get_mob_by_id(target_id)
 					if mob and mob.distance then
 						moogle_distance = math.sqrt(mob.distance)
@@ -1856,12 +1871,12 @@ windower.register_event('login', function()
     end
 end)
 
-windower.register_event('addon command', function(...)
+windower.register_event('addon command', function(command,...)
     local args = {...}
-    cmd = command and command:lower()
-    local arg = {...}
-	
-    args[1] = args[1]:lower()
+    local cmd = command and command:lower()
+	if args[1] then
+    	args[1] = args[1]:lower()
+	end
     if args[2] then
         args[2] = args[2]:lower()
     end
@@ -1869,8 +1884,8 @@ windower.register_event('addon command', function(...)
         args[3] = args[3]:lower()
     end
 	local current_main_job = windower.ffxi.get_player().main_job
-    if args[1] == 'toggle' then
-        if arg[2] == 'resistances' then
+    if cmd == 'toggle' then
+        if args[1] == 'resistances' then
             local target = windower.ffxi.get_mob_by_target('t')
             if settings.res_box.show then
                 res_box:hide()
@@ -1885,7 +1900,7 @@ windower.register_event('addon command', function(...)
             settings.res_box.show = not settings.res_box.show
             settings:save()
 
-        elseif arg[2] == 'joke' then
+        elseif args[1] == 'joke' then
             if settings.res_box.joke then
                 notice("Cruel Joke compatability will now be hidden.")
             else
@@ -1898,42 +1913,42 @@ windower.register_event('addon command', function(...)
             error("Accepts either 'segments' or 'resistances'.")
         end
 
-    elseif args[1] == 'bg' then
-        arg[2] = tonumber(arg[2])
-        if arg[1] == 'all' or arg[1] == 'resistances' then
-            if not arg[2] or arg[2] < 0 or arg[2] > 255 then
+    elseif cmd == 'bg' then
+        args[2] = tonumber(args[2])
+        if args[1] == 'all' or args[1] == 'resistances' then
+            if not args[2] or args[2] < 0 or args[2] > 255 then
                 error("Transparency value must be between 0 and 255.")
             else
-                if arg[1] == 'all' or arg[1] == 'resistances' then
-                    settings.res_box.bg.alpha = arg[2]
+                if args[1] == 'all' or args[1] == 'resistances' then
+                    settings.res_box.bg.alpha = args[2]
                     settings:save()
-                    res_box:bg_alpha(arg[2])
+                    res_box:bg_alpha(args[2])
                 end
             end
         else
             error("Accepts either 'resistances' or 'all'.")
         end
-    elseif args[1] == 'map' then
+    elseif cmd == 'map' then
         if not flags.sheolzone then
             error("Must be in either Sheol A, B or C to interact with maps.")
-        elseif arg[2] == 'center' then
+        elseif args[1] == 'center' then
             map:pos_x(windower.get_windower_settings().ui_x_res / 2 - settings.map.size.width / 2)
             map:pos_y(windower.get_windower_settings().ui_y_res / 2 - settings.map.size.height / 2)
-        elseif arg[2] == 'size' then
-            if not tonumber(arg[3]) then
+        elseif args[1] == 'size' then
+            if not tonumber(args[2]) then
                 error("[size] must be an integer.")
             else
-                settings.map.size.height = tonumber(arg[3])
-                settings.map.size.width = tonumber(arg[3])
+                settings.map.size.height = tonumber(args[2])
+                settings.map.size.width = tonumber(args[2])
                 map:size(settings.map.size.width, settings.map.size.height)
                 settings:save()
                 config.reload(settings)
             end
-        elseif arg[2] == 'floor' then
-            if not tonumber(arg[3]) then
+        elseif args[1] == 'floor' then
+            if not tonumber(args[2]) then
                 error("[floor] must be an integer fitting this Sheol.")
             else
-                map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-' .. arg[3] .. '.png')
+                map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-' .. args[2] .. '.png')
             end
         else
             if map and map:visible() then
@@ -1942,26 +1957,26 @@ windower.register_event('addon command', function(...)
                 map:show()
             end
         end
-    elseif args[1] == 'reset' then
+    elseif cmd == 'reset' then
         earned_MogSegments = 0
         update_display()
-    elseif args[1] == 'reload' or args[1] == 'r' then
+    elseif cmd == 'reload' or cmd == 'r' then
         windower.send_command('lua r OdyPro')
-    elseif args[1] == 'togglesound' or args[1] == 'ts' then
+    elseif cmd == 'togglesound' or cmd == 'ts' then
         toggleSound()
-    elseif args[1] == 'toggleautoamp' or args[1] == 'taa' then
+    elseif cmd == 'toggleautoamp' or cmd == 'taa' then
         toggleAutoAmp()
-    elseif args[1] == 'toggleautorp' or args[1] == 'tarp' then
+    elseif cmd == 'toggleautorp' or cmd == 'tarp' then
         toggleAutoRP()
-    elseif args[1] == 'autoweaponswap' or args[1] == 'aws' then
+    elseif cmd == 'autoweaponswap' or cmd == 'aws' then
 		toggleAutoWeaponSwap()
-    elseif args[1] == 'show' then
+    elseif cmd == 'show' then
         display:show()
-    elseif args[1] == 'hide' then
+    elseif cmd == 'hide' then
         display:hide()
         --------------------------------------
-    elseif args[1] == 'add' and args[2] then
-        local target = args[2]
+    elseif cmd == 'add' and args[1] then
+        local target = args[1]
         if target == 'nil' then
             return
         end
@@ -1973,22 +1988,22 @@ windower.register_event('addon command', function(...)
         end
         windower.add_to_chat(204, target .. ' added to mob scanner')
         --------------------------------------------------------------			
-    elseif args[1] == 'target' or args[1] == 't' then
+    elseif cmd == 'target' or cmd == 't' then
         target_nearest(settings.targets)
         --windower.add_to_chat(204, 'Targeting ..')
         ----------------------------------------
-    elseif args[1] == 'autotarget' or args[1] == 'at' then
+    elseif cmd == 'autotarget' or cmd == 'at' then
         auto_odytargetting()
-    elseif args[1] == 'autotargetsystem' or args[1] == 'ats' then
+    elseif cmd == 'autotargetsystem' or cmd == 'ats' then
         ats_mode_switch()
 --------------------------------------------------------- 
-    elseif args[1] == 'autotargetdistance' or args[1] == 'atd' then
-        ats_max_distance = tonumber(arg[2])
+    elseif cmd == 'autotargetdistance' or cmd == 'atd' then
+        ats_max_distance = tonumber(args[1])
 		settings.ats_max_distance = ats_max_distance 
 		config.save(settings)
 		log('Auto-targetting systems max distance set to '..settings.ats_max_distance..'.')
-	elseif args[1] == 'autotargetheight' or args[1] == 'ath' then
-		local value = tonumber(args[2])
+	elseif cmd == 'autotargetheight' or cmd == 'ath' then
+		local value = tonumber(args[1])
 		if not value then
 			log('Please provide a valid number for autotargetheight.')
 			return
@@ -2002,14 +2017,14 @@ windower.register_event('addon command', function(...)
 		settings.ats_max_height = value
 		config.save(settings)
 		log('Auto-targeting system max height set to ' .. value .. '.')
-	elseif args[1] == 'pickup' then
+	elseif cmd == 'pickup' then
 		flags.alarmDisabled = false
 		flags.alarmTriggered = false
         start_moglophone_timer()
 		update_display()
         --------------------------------------------
-	elseif args[1] == 'amp' then
-		local purchase_num = args[2]
+	elseif cmd == 'amp' then
+		local purchase_num = args[1]
 		local playerinv = windower.ffxi.get_items().inventory
 		local freeslots = playerinv.max - playerinv.count
 
@@ -2034,18 +2049,18 @@ windower.register_event('addon command', function(...)
 			log('You are not in Rabao')
 		end
 		---------------------------------------------
-	elseif args[1] == 'silence' then
+	elseif cmd == 'silence' then
 		windower.play_sound(sound_paths.blank)
 		flags.alarmDisabled = true
         --------------------------------------------
-	elseif args[1] == 'timerreset' then
+	elseif cmd == 'timerreset' then
 		moglophone_start_time = os.time() - 72100
 		settings.moglophone_start_time = moglophone_start_time
 		flags.alarmDisabled = false
 		flags.alarmTriggered = false
 		config.save(settings)
 		update_display()
-	elseif args[1] == 'mogdisplay' or args[1] == 'md' then
+	elseif cmd == 'mogdisplay' or cmd == 'md' then
 		if mogdisplay then
 		    mogdisplay = false
 		elseif not mogdisplay then
@@ -2053,18 +2068,18 @@ windower.register_event('addon command', function(...)
 		end
 		update_display()
         --------------------------------------------
-	elseif args[1] == 'charge' then
+	elseif cmd == 'charge' then
 		active_charge = true
 		if toggle_sound then windower.play_sound(sound_paths.charged) end
 		settings.active_charge = active_charge
 		settings:save()
 		log('RP Charge active.')
-	elseif args[1] == 'uncharge' then
+	elseif cmd == 'uncharge' then
 		active_charge = false
 		settings.active_charge = active_charge
 		settings:save()
 		log('RP Charge expended.')
-	elseif args[1] == 'unstuck' then
+	elseif cmd == 'unstuck' then
 		if not (last_npc and last_menu and last_npc_index) then
 			last_npc = 17789079
 			last_menu = 2001
@@ -2073,7 +2088,7 @@ windower.register_event('addon command', function(...)
 		end
 		moogle_resettinator()
 		--------------------------------------------
-	elseif args[1] == 'unstuck2' then
+	elseif cmd == 'unstuck2' then
 		if not last_npc then
 			last_npc = 17789076
 			last_menu = 172
@@ -2082,53 +2097,55 @@ windower.register_event('addon command', function(...)
 		moogle_resettinator()
 		log('Attempting to clear veridical conflux menu lock. unstuck2 should only be used if op gaol or op sheol was used last, otherwise use op unstuck .')
 		--------------------------
-	elseif args[1] == 'sheola' then 
+	elseif cmd == 'sheola' then 
 		odyssey_queue(1)
-	elseif args[1] == 'sheolb' then 
+	elseif cmd == 'sheolb' then 
 		odyssey_queue(2)
-	elseif args[1] == 'sheolc' then 
+	elseif cmd == 'sheolc' then 
 		odyssey_queue(3)
-	elseif args[1] == 'gaol' then 
+	elseif cmd == 'gaol' then 
 		odyssey_queue(4)
-	elseif args[1] == 'enter' then 
+	elseif cmd == 'enter' then 
 		odyssey_enter(4)
-	elseif args[1] == 'leave' then 
+	elseif cmd == 'leave' then 
 		windower.send_command('input /item "Moglophone II" <me>')
-	elseif args[1] == 'port' then   -- since the superwarp command is pretty close the the OdyPro command prefix i'll just have OdyPro translate these commands.
+	elseif cmd == 'port' then   -- since the superwarp command is pretty close the the OdyPro command prefix i'll just have OdyPro translate these commands.
 		windower.send_command('od port')
-	elseif args[1] == 'p' and args[2] == 'port' then 
+	elseif cmd == 'p' and args[1] == 'port' then 
 		windower.send_command('od p port')
-	elseif args[1] == 'exit' then 
+	elseif cmd == 'exit' then 
 		windower.send_command('od exit')
-	elseif args[1] == 'p' and args[2] == 'exit' then 
+	elseif cmd == 'p' and args[1] == 'exit' then 
 		windower.send_command('od p exit')
-	elseif args[1] == '1' then 
+	elseif cmd == '1' then 
 		windower.send_command('od 1')
-	elseif args[1] == 'p' and args[2] == '1' then 
+	elseif cmd == 'p' and args[1] == '1' then 
 		windower.send_command('od p 1')
-	elseif args[1] == '2' then 
+	elseif cmd == '2' then 
 		windower.send_command('od 2')
-	elseif args[1] == 'p' and args[2] == '2' then 
+	elseif cmd == 'p' and args[1] == '2' then 
 		windower.send_command('od p 2')
-	elseif args[1] == '3' then
+	elseif cmd == '3' then
 		windower.send_command('od 3')
-	elseif args[1] == 'p' and args[2] == '3' then 
+	elseif cmd == 'p' and args[1] == '3' then 
 		windower.send_command('od p 3')
-	elseif args[1] == 'test' then 
+	elseif cmd == 'test' then 
 		print(flags.sheolzone)
-	elseif args[1] == 'gaoltest' then 
+	elseif cmd == 'gaoltest' then 
 		print(flags.gaolzone)
-	elseif args[1] == 'movetest' then 
+	elseif cmd == 'movetest' then 
 		print(flags.is_standing_still)
-    elseif args[1]  == 'slashing' or args[1] == 'piercing' or args[1] == 'blunt' then
-        if args[2] == '' then
-            windower.add_to_chat(123, '[OdyPro] Current ' .. args[1] .. ' set: ' .. tostring(settings.job_weapon_sets[current_main_job][args[1]]))
+	elseif cmd == 'segtest' then 
+		print(flags.segzone)
+    elseif cmd  == 'slashing' or cmd == 'piercing' or cmd == 'blunt' then
+        if args[1] == '' then
+            windower.add_to_chat(123, '[OdyPro] Current ' .. cmd .. ' set: ' .. tostring(settings.job_weapon_sets[current_main_job][cmd]))
         else
-            settings.job_weapon_sets[current_main_job][args[1]] = args[2]
+            settings.job_weapon_sets[current_main_job][cmd] = args[1]
             config.save(settings)
-            windower.add_to_chat(122, '[OdyPro] Saved ' .. args[1] .. ' weapon set to ' .. args[2])
+            windower.add_to_chat(122, '[OdyPro] Saved ' .. cmd .. ' weapon set to ' .. args[1])
         end
-    elseif args[1] == 'help' then
+    elseif cmd == 'help' then
         windower.add_to_chat(207, 'OdyPro help:')
         windower.add_to_chat(206, '-------------C O M M A N D  L I S T-------------')
         windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
@@ -2204,9 +2221,16 @@ update_display()
 local function check_zone()
 	local zone_id = windower.ffxi.get_info().zone
     if zone_id == 279 or zone_id == 298 then
-		coroutine.sleep(2)
+		coroutine.sleep(1)
 		last_threshold = 0
-		windower.send_command('op reset')
+            earned_MogSegments = 0
+		if not auto_ody_targetting then 
+			auto_odytargetting()
+		end
+		coroutine.sleep(1.5)
+		if ats_mode == 2 then
+			ats_mode_switch()
+		end
         flags.in_Odyssey_zone = true
         coroutine.schedule(function()
 			induct_data()
@@ -2220,6 +2244,7 @@ local function check_zone()
 			config.save(settings)
 			update_display()
         end, 3)
+		sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
     elseif zone_id == 247 then
 		settings.carryOverSegments = 0
 		config.save(settings)
@@ -2521,7 +2546,7 @@ function face_target(transgressor)
 	--get_after_it(target,measurement)
 end
 
--- SATS™ My pride & joy.
+-- SATS™
 function target_nearest(target_names)
     local player = windower.ffxi.get_player()
     local player_mob = windower.ffxi.get_mob_by_id(player.id)
@@ -2549,7 +2574,7 @@ function target_nearest(target_names)
 			'akidu','allergorhai','apollinaris','azdaha',
 			'bendigeidfran','bes','chelamma','chnubis',
 			'malefis','lokberry','fornax','gandji','gravehaunter',
-			'ishum','kuk','langmeidong','man-kheper-re','maverick',
+			'ishum','kuk','langmeidong','man-kheper-re','maude',
 			'nerites','ptesan','shara','simir','spyrysyon','tabitjet',
 			'taniwha','tripix','zacatzontli',
 			}
@@ -2661,8 +2686,6 @@ function target_nearest_2()
 	local player = windower.ffxi.get_player()
 	local player_mob = windower.ffxi.get_mob_by_id(player.id)
 	local within_height = false
-	local same_name_present = false
-	local last_target_lower = last_target_name and last_target_name:lower()
 	if player and player.vitals.hp == 0 then return end -- Don't run if dead
 
 	if not flags.mobAlreadyTargetted then
@@ -2673,7 +2696,7 @@ function target_nearest_2()
 		if not closest then
 			for _, mob in pairs(mobs) do
 				if mob.valid_target and mob.hpp > 0 and mob.spawn_type == 16 and math.sqrt(mob.distance) <= ats_max_distance then
-					if math.abs(mob.z - player_mob.z) <= 3 then
+					if math.abs(mob.z - player_mob.z) <= settings.ats_max_height then
 					local mob_name = mob.name:lower()
 						if not closest then
 							closest = mob
@@ -2877,6 +2900,9 @@ windower.register_event('zone change', function(new_id, old_id)
 			if flags.segzone and not flags.gaolzone then
 				windower.unregister_event(res_monitor, floor_monitor)
 				log('Total haul: ' .. earned_MogSegments)
+				if ats_mode == 1 then
+					ats_mode_switch()
+				end
 			end
 			flags.segzone = nil
 			flags.gaolzone = false
@@ -2889,7 +2915,14 @@ windower.register_event('zone change', function(new_id, old_id)
         elseif old_id == 247 and (new_id == 298 or new_id == 279) then
 		    coroutine.sleep(1)
             last_threshold = 0
-            windower.send_command('op reset')
+            earned_MogSegments = 0
+			if not auto_ody_targetting then 
+				auto_odytargetting()
+			end
+			coroutine.sleep(1.5)
+			if ats_mode == 2 then
+				ats_mode_switch()
+			end
 			flags.in_Odyssey_zone = true
             induct_data()
 			zone_in_amount = previous_MogSegments
@@ -2908,7 +2941,13 @@ windower.register_event('load', function()
 	flags.zoning = true
     windower.add_to_chat(207, 'Welcome to OdyPro 3.5 !')
     if auto_ody_targetting then
-        windower.add_to_chat(207, "Auto-targetting systems online, max distance set to "..ats_max_distance..'.')
+		local system_mode 
+		if ats_mode == 1 then
+			system_mode = "(Focused)"
+		elseif ats_mode == 2 then
+			system_mode = "(General)"
+		end
+        windower.add_to_chat(207, "Auto-targetting systems online "..system_mode..", Max distance set to "..ats_max_distance..', max height set to '..settings.ats_max_height..'.')
     else
         windower.add_to_chat(207, "Auto-targetting systems offline.")
     end
@@ -2927,9 +2966,6 @@ windower.register_event('load', function()
     coroutine.schedule(function()
 		flags.inventory_fully_loaded = true
     end, 30)
-    if windower.ffxi.get_info().zone == 298 or windower.ffxi.get_info().zone == 279 then
-        sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
-    end
     local player = windower.ffxi.get_player()
     if player then
         current_character = player.name
@@ -2940,17 +2976,18 @@ end)
 windower.register_event('outgoing chunk',function(id,data,modified,injected,blocked)
 	if flags.in_Rabao_zone then
 		if id == 0x015 then
-			-- Use 'data' instead of 'modified' here
 			local currenttwenty = {
 				X = data:sub(5, 8),
 				Y = data:sub(13, 16),
 			}
-
 			local moving = not lasttwenty
 				or currenttwenty.X ~= lasttwenty.X
 				or currenttwenty.Y ~= lasttwenty.Y
 			if moving then
 				timing.last_move_time = os.clock()
+				if flags.busy_doing_stuff and not flags.augmentation_techniques then  -- since we have moved we know that we're no longer in a menu; Re-enable automated moogle interactions
+					flags.busy_doing_stuff = false
+				end
 			end
 			lasttwenty = currenttwenty
 			if os.clock() - timing.last_move_time > 2 then
