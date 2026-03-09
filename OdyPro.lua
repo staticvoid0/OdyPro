@@ -147,6 +147,8 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
 	MogSegments_record = 0,
 	carryOverSegments = 0,
 	segs_message_id = 40012,
+	rp_msg_id = 40017,
+	charge_msg_id = 40023,
 	ats_max_distance = 15,
 	ats_max_height = 3,
 	moglophone_start_time = 0,
@@ -190,6 +192,8 @@ local amp_tools = {}
 local packets_to_send = T{}
 local last_threshold = 0
 local segs_message_id = settings.segs_message_id or 40012
+local rp_msg_id = settings.rp_msg_id or 40017
+local charge_msg_id = settings.charge_msg_id or 40023
 local auto_grabbing_coroutine = nil
 local moglophone_timer = 0
 local remaining_time
@@ -492,7 +496,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
     if flags.in_Odyssey_zone then
 		------------------RP Charge tools--------------------------------
         if id == 0x02A and not injected then		
-			if packet['Message ID'] == 40022 then
+			if packet['Message ID'] == charge_msg_id then
 			   	if packet['Param 1'] == 6608 then
 					active_charge = true
 					if toggle_sound then windower.play_sound(sound_paths.charged) end
@@ -500,11 +504,32 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 					settings:save()
 					log('RP Charge active.')
 				end
-			elseif packet['Message ID'] == 40020 then
+			elseif packet['Message ID'] == 40021 then
 					log('Someone else is on that job.')
 				return true
-			elseif packet['Message ID'] == 40016 then	
+			elseif packet['Message ID'] == rp_msg_id then	
 				if packet['Param 1'] > 5000 then
+					active_charge = false
+					settings.active_charge = active_charge
+					settings:save()
+					log('RP Charge expended.')
+				end
+			-- Dynamic packet ID setters
+			elseif packet['Param 1'] == 6608 and packet['Message ID'] ~= charge_msg_id then
+				if (packet['Message ID'] == charge_msg_id + 1 or packet['Message ID'] == charge_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
+					charge_msg_id = packet['Message ID']
+					settings.charge_msg_id = charge_msg_id
+					active_charge = true
+					if toggle_sound then windower.play_sound(sound_paths.charged) end
+					settings.active_charge = active_charge
+					settings:save()
+					log('RP Charge active.')
+				end
+			-- Dynamic packet ID setters
+			elseif packet['Param 1'] > 5000 and packet['Message ID'] ~= rp_msg_id then
+				if (packet['Message ID'] == rp_msg_id + 1 or packet['Message ID'] == rp_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
+					rp_msg_id = packet['Message ID']
+					settings.rp_msg_id = rp_msg_id
 					active_charge = false
 					settings.active_charge = active_charge
 					settings:save()
@@ -547,7 +572,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 				end
 			elseif packet['Param 2'] and packet['Param 1'] then
 				if segs_message_id and packet['Message ID'] == segs_message_id then
-					print("Backup check in 2A parse set segzone flag")
+					--print("Backup check in 2A parse set segzone flag")
 					flags.segzone = true
 					if not sheolzone_fetcher then
 						sheolzone_fetcher = windower.register_event('incoming chunk', set_sheolzone_inside)
@@ -637,7 +662,7 @@ local function process_packet(packet)
 	----------------------------------------------
 	if not (flags.auto_grabbing_in_progress or flags.auto_II_grabbing_in_progress or flags.auto_amp_grabbing_in_progress) then return end
     if #packets_to_send > 0 then
-		if flags.auto_grabbing_state and #packets_to_send == 2 and flags.unable_to_grab then
+		if flags.unable_to_grab and flags.auto_grabbing_state and #packets_to_send == 2 then
 			if moglophone_timer and moglophone_timer > 1 then
 				local unit 
 				if flags.unit_flag == 0 then
@@ -1145,7 +1170,7 @@ local function start_moglophone_timer()
     moglophone_start_time = os.time() -- Get the current real-world time
     settings.moglophone_start_time = moglophone_start_time -- Save the start time to settings file
 	flags.alarmDisabled = false  
-	if flags.alarmDisabled == false then flags.alarmTriggered = false end   
+	flags.alarmTriggered = false
     config.save(settings) 
 	update_display()
 end
@@ -1161,7 +1186,6 @@ local function moglophone_alarm_handler()
 		if not flags.auto_grabbing_in_progress and not has_moglophone_now then
 		    if toggle_sound then windower.play_sound(sound_paths.prelude) end
 		    log('Time to pickup Moglophone; //op silence to disable alarm')
-		    update_display()
 		end
 
 		coroutine.schedule(moglophone_alarm_handler, 180)
@@ -2129,14 +2153,6 @@ windower.register_event('addon command', function(command,...)
 		windower.send_command('od 3')
 	elseif cmd == 'p' and args[1] == '3' then 
 		windower.send_command('od p 3')
-	elseif cmd == 'test' then 
-		print(flags.sheolzone)
-	elseif cmd == 'gaoltest' then 
-		print(flags.gaolzone)
-	elseif cmd == 'movetest' then 
-		print(flags.is_standing_still)
-	elseif cmd == 'segtest' then 
-		print(flags.segzone)
     elseif cmd  == 'slashing' or cmd == 'piercing' or cmd == 'blunt' then
         if args[1] == '' then
             windower.add_to_chat(123, '[OdyPro] Current ' .. cmd .. ' set: ' .. tostring(settings.job_weapon_sets[current_main_job][cmd]))
@@ -2175,7 +2191,8 @@ windower.register_event('addon command', function(command,...)
         windower.add_to_chat(207, '- autotarget / at: toggles auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetdistance / atd # : sets the max yalms for the auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetheight / ath # : sets the max height in yalms for the auto-targetting system.')
-		windower.add_to_chat(207, '- autotargetsystem / ats : toggles between V.1 and V.2 auto-targetting systems (V1 is best all around atm.)')
+		windower.add_to_chat(207, '- autotargetsystem / ats : toggles between Focused and General auto-targetting systems, General auto-targets mobs of any name based on which is closest and highest HP, '..
+		'and Focused prioritizes NMs of Sheol, Agon mobs, mobs of the same name as previous target then nostos or specified targets; Focused also auto-omits mobs with Invincible and Perfect Dodge. Focused can be very useful outside of Odyssey in some cases.')
 		--------------------------A U T O - W E A P O N S W A P - C O M M A N D S-----------------------------------------------
 		windower.add_to_chat(206, '------A U T O - W E A P O N S W A P - C O M M A N D S  ------')
         windower.add_to_chat(207, '- aws : toggles the auto-weapon-swap system')
@@ -2389,7 +2406,7 @@ local function auto_swap_weapon_if_needed(best_type, values)
 	end
     -- Lookup what the user wants to equip for this type
     local set_name = settings.job_weapon_sets[current_main_job][best_type]
-    if toggle_auto_weapon_swap and (current_main_job ~= 'PLD' and current_main_job ~= 'RUN') then
+    if toggle_auto_weapon_swap and (current_main_job ~= 'PLD' and current_main_job ~= 'RUN') then  -- We dont want AWS while tanking
         if set_name then
 			if best_type == 'piercing' then
 				if toggle_sound then windower.play_sound(sound_paths.piercing) end
@@ -2842,12 +2859,23 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
 					--print(flags.sheolzone and "Setting sheolzone inside to :"..flags.sheolzone)
 					map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
 					set_up_entry()
+					----------handle ATS for segzone-------------
+					if not auto_ody_targetting then 
+						auto_odytargetting()
+					end
+					coroutine.sleep(1.5)
+					if ats_mode == 2 then
+						ats_mode_switch()
+					end
+					--------------------------------------------
                     break
                 end
             end
 			if not flags.sheolzone or flags.sheolzone > 3 then
 				inside_ody_moglophone_ii_count = 3
 				flags.gaolzone = true
+			elseif flags.gaolzone then
+				flags.gaolzone = false
 			end
             windower.unregister_event(sheolzone_fetcher)
         end
@@ -2916,13 +2944,6 @@ windower.register_event('zone change', function(new_id, old_id)
 		    coroutine.sleep(1)
             last_threshold = 0
             earned_MogSegments = 0
-			if not auto_ody_targetting then 
-				auto_odytargetting()
-			end
-			coroutine.sleep(1.5)
-			if ats_mode == 2 then
-				ats_mode_switch()
-			end
 			flags.in_Odyssey_zone = true
             induct_data()
 			zone_in_amount = previous_MogSegments
@@ -3013,9 +3034,11 @@ windower.register_event('outgoing chunk',function(id,data,modified,injected,bloc
 			local p = packets.parse('outgoing', data)
 			if p["_unknown1"] == 16384 and flags.busy_doing_stuff then
 				flags.busy_doing_stuff = false
-			elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["_unknown1"] == 0 and p["Menu ID"] == 2001 and p["Automated Message"] == false and flags.busy_doing_stuff then
+			elseif p["Target"] == 17789079 and --[[p["Option Index"] == 0 and]] p["_unknown1"] == 0 and p["Menu ID"] == 2001 and p["Automated Message"] == false and flags.busy_doing_stuff then
 				flags.busy_doing_stuff = false
-			elseif p["Target"] == 17789079 and p["Option Index"] == 0 and p["Menu ID"] == 2005 and p["Automated Message"] == false and flags.busy_doing_stuff then
+			elseif p["Target"] == 17789079 and --[[p["Option Index"] == 0 and]] p["Menu ID"] == 2005 and p["Automated Message"] == false and flags.busy_doing_stuff then
+				flags.busy_doing_stuff = false
+			elseif p["Target"] == 17789076 and p["Automated Message"] == false and flags.busy_doing_stuff then
 				flags.busy_doing_stuff = false
 			end
 		end
