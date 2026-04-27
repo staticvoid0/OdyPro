@@ -2868,7 +2868,6 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
 				inside_ody_moglophone_ii_count = 3
 				flags.gaolzone = true
 			elseif flags.gaolzone then
-				print("In segzone, unsettings gaolzone flag.")
 				flags.gaolzone = false
 			elseif flags.sheolzone >= 1 and flags.sheolzone <= 3 then
 				map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
