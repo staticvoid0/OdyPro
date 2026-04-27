@@ -2280,8 +2280,13 @@ local function check_zone()
 end
 
 function set_up_entry()
-		res_monitor = windower.register_event('target change', print_resistances)
-		floor_monitor = windower.register_event('outgoing chunk', watch_floor_change)
+    if not res_monitor then
+        res_monitor = windower.register_event('target change', print_resistances)
+    end
+
+    if not floor_monitor then
+        floor_monitor = windower.register_event('outgoing chunk', watch_floor_change)
+    end
 end
 
 local weapon_cache = {
@@ -2856,18 +2861,6 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
                 if table.find(v, instance) then
                     flags.sheolzone = k
 					flags.segzone = flags.sheolzone
-					--print(flags.sheolzone and "Setting sheolzone inside to :"..flags.sheolzone)
-					map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
-					set_up_entry()
-					----------handle ATS for segzone-------------
-					if not auto_ody_targetting then 
-						auto_odytargetting()
-					end
-					coroutine.sleep(1.5)
-					if ats_mode == 2 then
-						ats_mode_switch()
-					end
-					--------------------------------------------
                     break
                 end
             end
@@ -2875,7 +2868,19 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
 				inside_ody_moglophone_ii_count = 3
 				flags.gaolzone = true
 			elseif flags.gaolzone then
+				print("In segzone, unsettings gaolzone flag.")
 				flags.gaolzone = false
+			elseif flags.sheolzone >= 1 and flags.sheolzone <= 3 then
+				map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
+				set_up_entry()
+				----------handle ATS for segzone-------------
+				if not auto_ody_targetting then 
+					auto_odytargetting()
+				end
+				coroutine.sleep(1.5)
+				if ats_mode == 2 then
+					ats_mode_switch()
+				end
 			end
             windower.unregister_event(sheolzone_fetcher)
         end
