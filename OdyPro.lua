@@ -151,6 +151,7 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
 	charge_msg_id = 40023,
 	ats_max_distance = 15,
 	ats_max_height = 3,
+	ATSOrder = 1,
 	moglophone_start_time = 0,
     targets = L {'agon','nostos'},
 	blacktargets = L {'apollyon slime','apollyon ghost'},
@@ -2030,10 +2031,32 @@ windower.register_event('addon command', function(command,...)
 			settings.blacktargets:append(target)
 			settings.blacktargets:sort()
 			settings:save()
+			windower.add_to_chat(204,'OdyPro: '.. target .. ' added to ignore list.')
+		else
+			windower.add_to_chat(204,'OdyPro: Already ignoring '..target..'.')
 		end
 
-		windower.add_to_chat(204, target .. ' added to ignore list.')
-	--------------------------------------------------------------		
+	--------------------------------------------------------------	
+	elseif cmd == 'remove' and args[1] then
+		local phrase = table.concat(args, ' '):lower()
+		local new_list = L{}
+		local found = false
+
+		for _, value in ipairs(settings.blacktargets) do
+			if value:lower() == phrase then
+				found = true
+			else
+				new_list:append(value)
+			end
+		end
+
+		if found then
+			settings.blacktargets = new_list
+			settings:save()
+			windower.add_to_chat(204, 'OdyPro: Removed phrase: ' .. phrase)
+		else
+			windower.add_to_chat(204, 'OdyPro: Phrase not found: ' .. phrase)
+		end
     elseif cmd == 'target' or cmd == 't' then
         target_nearest(settings.targets)
         --windower.add_to_chat(204, 'Targeting ..')
@@ -2063,6 +2086,21 @@ windower.register_event('addon command', function(command,...)
 		settings.ats_max_height = value
 		config.save(settings)
 		log('Auto-targeting system max height set to ' .. value .. '.')
+	elseif cmd == 'autotargetorder' or cmd == 'ato' then
+		settings.ATSOrder = (settings.ATSOrder or 1) + 1
+		if settings.ATSOrder > 6 then
+			settings.ATSOrder = 1
+		end
+		local orders = {
+			[1] = '1: NM -> Agon -> Nostos',
+			[2] = '2: Nostos -> Agon -> NM',
+			[3] = '3: Agon -> NM -> Nostos',
+			[4] = '4: Agon -> Nostos -> NM',
+			[5] = '5: Nostos -> NM -> Agon',
+			[6] = '6: NM -> Nostos -> Agon',
+		}
+		windower.add_to_chat(122, 'OdyPro: ATS (Focused) order: ' .. orders[settings.ATSOrder])	
+		settings:save()
 	elseif cmd == 'pickup' then
 		flags.alarmDisabled = false
 		flags.alarmTriggered = false
@@ -2186,7 +2224,7 @@ windower.register_event('addon command', function(command,...)
     elseif cmd == 'help' then
         windower.add_to_chat(207, 'OdyPro help:')
         windower.add_to_chat(206, '-------------C O M M A N D  L I S T-------------')
-        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
+        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , autotargetorder or ato, ats, ignore [phrase], remove [phrase],  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
         windower.add_to_chat(206, '-----C O M M A N D S   E X P L A N A T I O N----')
         windower.add_to_chat(207, '- reset : sets the Instance Mog Segments to 0 and updates the display.')
         windower.add_to_chat(207, '- togglesound / ts: toggle sound effects off and on (on by default).')
@@ -2213,8 +2251,11 @@ windower.register_event('addon command', function(command,...)
         windower.add_to_chat(207, '- autotarget / at: toggles auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetdistance / atd # : sets the max yalms for the auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetheight / ath # : sets the max height in yalms for the auto-targetting system.')
+		windower.add_to_chat(207, '- autotargetorder / ato : cycles the priority order for the ATS (Focused) to use for Sheol A, B, C; There are 6 options to cycle between. Preference will auto-save.')
 		windower.add_to_chat(207, '- autotargetsystem / ats : toggles between Focused and General auto-targetting systems, General auto-targets mobs of any name based on which is closest and highest HP, '..
 		'and Focused prioritizes NMs of Sheol, Agon mobs, mobs of the same name as previous target then nostos or specified targets; Focused also auto-omits mobs with Invincible and Perfect Dodge. Focused can be very useful outside of Odyssey in some cases.')
+		windower.add_to_chat(207, '- ignore [phrase]: adds keyword or full mobname to General ATS blacklist.')
+		windower.add_to_chat(207, '- remove [phrase]: remove keyword or full mobname from General ATS blacklist.')
 		--------------------------A U T O - W E A P O N S W A P - C O M M A N D S-----------------------------------------------
 		windower.add_to_chat(206, '------A U T O - W E A P O N S W A P - C O M M A N D S  ------')
         windower.add_to_chat(207, '- aws : toggles the auto-weapon-swap system')
@@ -2673,7 +2714,7 @@ function target_nearest(target_names)
 					-- In the future I will possibly reduce tolerance so distance weighs more
                     else
                         for _, target_name in ipairs(target_names) do
-                            if mob_name:find(target_name:lower()) and not mob_name:find("'s ", 1, true) then
+                            if mob_name:find(target_name:lower()) then
                                 -- bias weight system, like AI models. (in-development)
                                 local same_name_bonus = (last_target_lower and mob_name == last_target_lower) and 10 or 0
                                 local score_new = mob.hpp - (math.sqrt(mob.distance) * 0.25) + same_name_bonus
@@ -2688,8 +2729,34 @@ function target_nearest(target_names)
                 end
             end
         end
+		local order = settings.ATSOrder
+		local closest
 
-        local closest = nm_target or agon_target or fallback_target
+		if order == 1 then
+			-- NM > Agon > Nostos
+			closest = nm_target or agon_target or fallback_target
+
+		elseif order == 2 then
+			-- Nostos > Agon > NM
+			closest = fallback_target or agon_target or nm_target
+
+		elseif order == 3 then
+			-- Agon > NM > Nostos
+			closest = agon_target or nm_target or fallback_target
+
+		elseif order == 4 then
+			-- Agon > Nostos > NM
+			closest = agon_target or fallback_target or nm_target
+
+		elseif order == 5 then
+			-- Nostos > NM > Agon
+			closest = fallback_target or nm_target or agon_target
+
+		elseif order == 6 then
+			-- NM > Nostos > Agon
+			closest = nm_target or fallback_target or agon_target
+		end
+        --local closest = nm_target or agon_target or fallback_target
         if not closest then
             if not within_height then
                 windower.add_to_chat(166, 'Target found within distance limit, but beyond the height threshold.')
