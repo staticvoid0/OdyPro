@@ -2030,10 +2030,32 @@ windower.register_event('addon command', function(command,...)
 			settings.blacktargets:append(target)
 			settings.blacktargets:sort()
 			settings:save()
+			windower.add_to_chat(204,'OdyPro: '.. target .. ' added to ignore list.')
+		else
+			windower.add_to_chat(204,'OdyPro: Already ignoring '..target..'.')
 		end
 
-		windower.add_to_chat(204, target .. ' added to ignore list.')
-	--------------------------------------------------------------		
+	--------------------------------------------------------------	
+	elseif cmd == 'remove' and args[1] then
+		local phrase = table.concat(args, ' '):lower()
+		local new_list = L{}
+		local found = false
+
+		for _, value in ipairs(settings.blacktargets) do
+			if value:lower() == phrase then
+				found = true
+			else
+				new_list:append(value)
+			end
+		end
+
+		if found then
+			settings.blacktargets = new_list
+			settings:save()
+			windower.add_to_chat(204, 'OdyPro: Removed phrase: ' .. phrase)
+		else
+			windower.add_to_chat(204, 'OdyPro: Phrase not found: ' .. phrase)
+		end
     elseif cmd == 'target' or cmd == 't' then
         target_nearest(settings.targets)
         --windower.add_to_chat(204, 'Targeting ..')
@@ -2186,7 +2208,7 @@ windower.register_event('addon command', function(command,...)
     elseif cmd == 'help' then
         windower.add_to_chat(207, 'OdyPro help:')
         windower.add_to_chat(206, '-------------C O M M A N D  L I S T-------------')
-        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , ats,  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
+        windower.add_to_chat(207, '//op reset, togglesound or ts, toggleautoamp or taa, tarp, aws, slashing (weaponmode name), piercing (weaponmode name), blunt (weaponmode name), amp #, show, hide, mogdisplay or md, charge, uncharge, gaol, reload or r, unstuck, unstuck2, add [target], target or t , autotarget or at , autotargetdistance or atd # ,autotargetheight or ath # , ats, ignore [phrase], remove [phrase],  silence , toggle [resistances/joke] , bg [resistances/all] , map, map center, map size [size], map floor [floor]')
         windower.add_to_chat(206, '-----C O M M A N D S   E X P L A N A T I O N----')
         windower.add_to_chat(207, '- reset : sets the Instance Mog Segments to 0 and updates the display.')
         windower.add_to_chat(207, '- togglesound / ts: toggle sound effects off and on (on by default).')
@@ -2215,6 +2237,8 @@ windower.register_event('addon command', function(command,...)
 		windower.add_to_chat(207, '- autotargetheight / ath # : sets the max height in yalms for the auto-targetting system.')
 		windower.add_to_chat(207, '- autotargetsystem / ats : toggles between Focused and General auto-targetting systems, General auto-targets mobs of any name based on which is closest and highest HP, '..
 		'and Focused prioritizes NMs of Sheol, Agon mobs, mobs of the same name as previous target then nostos or specified targets; Focused also auto-omits mobs with Invincible and Perfect Dodge. Focused can be very useful outside of Odyssey in some cases.')
+		windower.add_to_chat(207, '- ignore [phrase]: adds keyword or full mobname to General ATS blacklist.')
+		windower.add_to_chat(207, '- remove [phrase]: remove keyword or full mobname from General ATS blacklist.')
 		--------------------------A U T O - W E A P O N S W A P - C O M M A N D S-----------------------------------------------
 		windower.add_to_chat(206, '------A U T O - W E A P O N S W A P - C O M M A N D S  ------')
         windower.add_to_chat(207, '- aws : toggles the auto-weapon-swap system')

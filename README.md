@@ -1,8 +1,8 @@
-# 🧭 OdyPro v3.5
+# 🧭 OdyPro v3.6
 
 ### Everything Odyssey addon for Windower 4
 
-[Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.5/OdyPro.zip)
+[Download OdyPro](https://github.com/staticvoid0/OdyPro/releases/download/3.6/OdyPro.zip)
 
 - Handles Moglophone & Amplifier pickup automatically.
 - Offers optional auto-amp use inside Gaol boss chambers.
@@ -23,6 +23,11 @@
 
 
 ## 🧾 Changelog
+
+### **v3.5 → v3.6**
+- Added ignore rules for any mobs with an  's  in their name.
+- Added blacklist feature and command (//op ignore [keyword(s)] for the (General)  ATS to ignore certain mobs. i.e. Apollyon Slime  would be //op ignore apollyon slime
+- Other bugfixes and minor fixes.
 
 ### **v3.4.3 → v3.5**
 - Revamped Auto-targeting system's trigger mechanism to make it quicker and more consistent and use less resources.
