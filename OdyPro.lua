@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.5'
+_addon.version = '3.6'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -153,6 +153,7 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
 	ats_max_height = 3,
 	moglophone_start_time = 0,
     targets = L {'agon','nostos'},
+	blacktargets = L {'apollyon slime','apollyon ghost'},
     sets = {},
 	toggle_sound = true,
 	toggle_auto_amp = true,
@@ -495,52 +496,53 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 	local packet = packets.parse('incoming', data)
     if flags.in_Odyssey_zone then
 		------------------RP Charge tools--------------------------------
-        if id == 0x02A and not injected then		
-			if packet['Message ID'] == charge_msg_id then
-			   	if packet['Param 1'] == 6608 then
-					active_charge = true
-					if toggle_sound then windower.play_sound(sound_paths.charged) end
-					settings.active_charge = active_charge
-					settings:save()
-					log('RP Charge active.')
+        if id == 0x02A and not injected then	
+			if flags.gaolzone then	
+				if packet['Message ID'] == charge_msg_id then
+					if packet['Param 1'] == 6608 then
+						active_charge = true
+						if toggle_sound then windower.play_sound(sound_paths.charged) end
+						settings.active_charge = active_charge
+						settings:save()
+						log('RP Charge active.')
+					end
+				elseif packet['Message ID'] == 40021 then
+						log('Someone else is on that job.')
+					return true
+				elseif packet['Message ID'] == rp_msg_id then	
+					if packet['Param 1'] > 5000 then
+						active_charge = false
+						settings.active_charge = active_charge
+						settings:save()
+						log('RP Charge expended.')
+					end
+				-- Dynamic packet ID setters
+				elseif packet['Param 1'] == 6608 and packet['Message ID'] ~= charge_msg_id then
+					if (packet['Message ID'] == charge_msg_id + 1 or packet['Message ID'] == charge_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
+						charge_msg_id = packet['Message ID']
+						settings.charge_msg_id = charge_msg_id
+						active_charge = true
+						if toggle_sound then windower.play_sound(sound_paths.charged) end
+						settings.active_charge = active_charge
+						settings:save()
+						log('RP Charge active.')
+					end
+				-- Dynamic packet ID setters
+				elseif packet['Param 1'] > 5000 and packet['Message ID'] ~= rp_msg_id then
+					if (packet['Message ID'] == rp_msg_id + 1 or packet['Message ID'] == rp_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
+						rp_msg_id = packet['Message ID']
+						settings.rp_msg_id = rp_msg_id
+						active_charge = false
+						settings.active_charge = active_charge
+						settings:save()
+						log('RP Charge expended.')
+					end
 				end
-			elseif packet['Message ID'] == 40021 then
-					log('Someone else is on that job.')
-				return true
-			elseif packet['Message ID'] == rp_msg_id then	
-				if packet['Param 1'] > 5000 then
-					active_charge = false
-					settings.active_charge = active_charge
-					settings:save()
-					log('RP Charge expended.')
+				---------------------Segment tracking------------------------------------------
+			elseif flags.segzone then
+				if initial_checkthrough == true and not segs_message_id then
+					induct_data()
 				end
-			-- Dynamic packet ID setters
-			elseif packet['Param 1'] == 6608 and packet['Message ID'] ~= charge_msg_id then
-				if (packet['Message ID'] == charge_msg_id + 1 or packet['Message ID'] == charge_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
-					charge_msg_id = packet['Message ID']
-					settings.charge_msg_id = charge_msg_id
-					active_charge = true
-					if toggle_sound then windower.play_sound(sound_paths.charged) end
-					settings.active_charge = active_charge
-					settings:save()
-					log('RP Charge active.')
-				end
-			-- Dynamic packet ID setters
-			elseif packet['Param 1'] > 5000 and packet['Message ID'] ~= rp_msg_id then
-				if (packet['Message ID'] == rp_msg_id + 1 or packet['Message ID'] == rp_msg_id + 2) and packet['Param 2'] >= packet['Param 1'] then
-					rp_msg_id = packet['Message ID']
-					settings.rp_msg_id = rp_msg_id
-					active_charge = false
-					settings.active_charge = active_charge
-					settings:save()
-					log('RP Charge expended.')
-				end
-			end
-		----------------------------------------------------------------------
-            if initial_checkthrough == true and not segs_message_id then
-                induct_data()
-            end
-			if flags.segzone then
 				-- Only process if Param 1 and Param 2 exist
 				if packet['Param 2'] and packet['Param 1'] then
 					if segs_message_id and packet['Message ID'] == segs_message_id and previous_MogSegments ~= packet['Param 2'] then
@@ -580,6 +582,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 				end
 			end
         end
+		----------------------------------------------------------------------
 	elseif flags.in_Rabao_zone and not flags.zoning then
 		if id == 0x02A and not injected then
 			if packet['Message ID'] == 45041 then
@@ -1490,8 +1493,9 @@ local function get_odypro_logo()
 		highlight_color = {red = 70, green = 90, blue = 70} -- Dark green
 	end
     -- Simulate a bold effect by stacking colors
+	-- ®
     local logo_str = string.format(
-        '\\cs(%d,%d,%d)Ody\\cr\\cs(%d,%d,%d)Pro\\cr',
+        '\\cs(%d,%d,%d)Ody\\cr\\cs(%d,%d,%d)Pro™\\cr',
         highlight_color.red, highlight_color.green, highlight_color.blue,
         primary_color.red, primary_color.green, primary_color.blue
     )
@@ -1887,6 +1891,7 @@ windower.register_event('login', function()
 			flags.zoning = false
 			current_character = player.name
 			flags.unable_to_grab = false
+			windower.send_command('op r')
 		end, 10)
 		--coroutine.sleep(5)
 		--flags.busy_doing_stuff = false
@@ -2000,7 +2005,7 @@ windower.register_event('addon command', function(command,...)
         display:hide()
         --------------------------------------
     elseif cmd == 'add' and args[1] then
-        local target = args[1]
+        local target = table.concat(args, ' ')
         if target == 'nil' then
             return
         end
@@ -2012,6 +2017,23 @@ windower.register_event('addon command', function(command,...)
         end
         windower.add_to_chat(204, target .. ' added to mob scanner')
         --------------------------------------------------------------			
+	elseif cmd == 'ignore' and args[1] then
+		local target = table.concat(args, ' ')
+
+		if target == 'nil' then
+			return
+		end
+
+		target = target:lower()
+
+		if not settings.blacktargets:contains(target) then
+			settings.blacktargets:append(target)
+			settings.blacktargets:sort()
+			settings:save()
+		end
+
+		windower.add_to_chat(204, target .. ' added to ignore list.')
+	--------------------------------------------------------------		
     elseif cmd == 'target' or cmd == 't' then
         target_nearest(settings.targets)
         --windower.add_to_chat(204, 'Targeting ..')
@@ -2147,7 +2169,7 @@ windower.register_event('addon command', function(command,...)
 		windower.send_command('od p 1')
 	elseif cmd == '2' then 
 		windower.send_command('od 2')
-	elseif cmd == 'p' and args[1] == '2' then 
+	elseif cmd == 'p' and args[1] == '2' then
 		windower.send_command('od p 2')
 	elseif cmd == '3' then
 		windower.send_command('od 3')
@@ -2280,8 +2302,13 @@ local function check_zone()
 end
 
 function set_up_entry()
-		res_monitor = windower.register_event('target change', print_resistances)
-		floor_monitor = windower.register_event('outgoing chunk', watch_floor_change)
+    if not res_monitor then
+        res_monitor = windower.register_event('target change', print_resistances)
+    end
+
+    if not floor_monitor then
+        floor_monitor = windower.register_event('outgoing chunk', watch_floor_change)
+    end
 end
 
 local weapon_cache = {
@@ -2563,6 +2590,18 @@ function face_target(transgressor)
 	--get_after_it(target,measurement)
 end
 
+local function is_blacklisted(mob_name, blacklisted)
+    mob_name = mob_name:lower()
+
+    for _, keyword in ipairs(blacklisted) do
+        if mob_name:find(keyword:lower(), 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
 -- SATS™
 function target_nearest(target_names)
     local player = windower.ffxi.get_player()
@@ -2634,7 +2673,7 @@ function target_nearest(target_names)
 					-- In the future I will possibly reduce tolerance so distance weighs more
                     else
                         for _, target_name in ipairs(target_names) do
-                            if mob_name:find(target_name:lower()) then
+                            if mob_name:find(target_name:lower()) and not mob_name:find("'s ", 1, true) then
                                 -- bias weight system, like AI models. (in-development)
                                 local same_name_bonus = (last_target_lower and mob_name == last_target_lower) and 10 or 0
                                 local score_new = mob.hpp - (math.sqrt(mob.distance) * 0.25) + same_name_bonus
@@ -2715,15 +2754,17 @@ function target_nearest_2()
 				if mob.valid_target and mob.hpp > 0 and mob.spawn_type == 16 and math.sqrt(mob.distance) <= ats_max_distance then
 					if math.abs(mob.z - player_mob.z) <= settings.ats_max_height then
 					local mob_name = mob.name:lower()
-						if not closest then
-							closest = mob
-						else
-							if mob.hpp == 100 and mob.distance <= (closest.distance + 5) then
+						if not mob_name:find("'s ", 1, true) and not is_blacklisted(mob_name, settings.blacktargets) then
+							if not closest then
 								closest = mob
-							elseif mob.hpp >= 90 and mob.distance <= (closest.distance + 2.5) then
-								closest = mob
-							elseif mob.hpp >= 75 and mob.distance < closest.distance then
-								closest = mob
+							else
+								if mob.hpp == 100 and mob.distance <= (closest.distance + 5) then
+									closest = mob
+								elseif mob.hpp >= 90 and mob.distance <= (closest.distance + 2.5) then
+									closest = mob
+								elseif mob.hpp >= 75 and mob.distance < closest.distance then
+									closest = mob
+								end
 							end
 						end
 					end
@@ -2856,18 +2897,6 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
                 if table.find(v, instance) then
                     flags.sheolzone = k
 					flags.segzone = flags.sheolzone
-					--print(flags.sheolzone and "Setting sheolzone inside to :"..flags.sheolzone)
-					map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
-					set_up_entry()
-					----------handle ATS for segzone-------------
-					if not auto_ody_targetting then 
-						auto_odytargetting()
-					end
-					coroutine.sleep(1.5)
-					if ats_mode == 2 then
-						ats_mode_switch()
-					end
-					--------------------------------------------
                     break
                 end
             end
@@ -2876,6 +2905,17 @@ function set_sheolzone_inside(id, data, modified, injected, blocked)
 				flags.gaolzone = true
 			elseif flags.gaolzone then
 				flags.gaolzone = false
+			elseif flags.sheolzone >= 1 and flags.sheolzone <= 3 then
+				map:path(windower.addon_path .. 'maps/' .. flags.sheolzone .. '-1.png')
+				set_up_entry()
+				----------handle ATS for segzone-------------
+				if not auto_ody_targetting then 
+					auto_odytargetting()
+				end
+				coroutine.sleep(1.5)
+				if ats_mode == 2 then
+					ats_mode_switch()
+				end
 			end
             windower.unregister_event(sheolzone_fetcher)
         end
@@ -2960,7 +3000,7 @@ end)
 
 windower.register_event('load', function()
 	flags.zoning = true
-    windower.add_to_chat(207, 'Welcome to OdyPro 3.5 !')
+    windower.add_to_chat(207, 'Welcome to OdyPro 3.6 !')
     if auto_ody_targetting then
 		local system_mode 
 		if ats_mode == 1 then
@@ -2972,7 +3012,8 @@ windower.register_event('load', function()
     else
         windower.add_to_chat(207, "Auto-targetting systems offline.")
     end
-    windower.add_to_chat(207, 'It is strongly recommended to read over the new commands with //op help')
+    windower.add_to_chat(207, ' \nIf you become menu-locked at Moogle in Rabao, simply use //op unstuck. Clears every time.')
+	windower.add_to_chat(207, ' \n//op help for all command information.')
 	if toggle_sound then windower.play_sound(sound_paths.odyproload) end
 	display:show()
     coroutine.schedule(function()
