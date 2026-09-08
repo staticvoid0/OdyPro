@@ -24,6 +24,11 @@
 
 ## 🧾 Changelog
 
+### **v3.5 → v3.6**
+- Added ignore rules for any mobs with an  's  in their name.
+- Added blacklist feature and command (//op ignore [keyword(s)] for the (General)  ATS to ignore certain mobs. i.e. Apollyon Slime  would be //op ignore apollyon slime
+- Other bugfixes and minor fixes.
+
 ### **v3.4.3 → v3.5**
 - Revamped Auto-targeting system's trigger mechanism to make it quicker and more consistent and use less resources.
 - Revamped ATS 2.0. The user may now use //op ats  to change ATS mode to a general system that does not require mob keywords to be specified.
