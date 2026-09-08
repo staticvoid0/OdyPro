@@ -1,4 +1,4 @@
-# 🧭 OdyPro v3.5
+# 🧭 OdyPro v3.6
 
 ### Everything Odyssey addon for Windower 4
 
