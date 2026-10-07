@@ -1,4 +1,4 @@
-# 🧭 OdyPro v3.6
+# 🧭 OdyPro v3.7
 
 ### Everything Odyssey addon for Windower 4
 
@@ -23,6 +23,11 @@
 
 
 ## 🧾 Changelog
+
+### **v3.6 → v3.7**
+- Updated RP tracking after retail updates.
+- Updated RP charge tracking after retail updates.
+- '//op unstuck' bugfix.
 
 ### **v3.5 → v3.6**
 - Added ignore rules for any mobs with an  's  in their name.
