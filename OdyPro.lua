@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.6'
+_addon.version = '3.7'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -146,9 +146,9 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
 	padding = 1,
 	MogSegments_record = 0,
 	carryOverSegments = 0,
-	segs_message_id = 40012,
-	rp_msg_id = 40017,
-	charge_msg_id = 40023,
+	segs_message_id = 40017,
+	rp_msg_id = 40021,
+	charge_msg_id = 40027,
 	ats_max_distance = 15,
 	ats_max_height = 3,
 	ATSOrder = 1,
@@ -193,9 +193,9 @@ local timing = {}
 local amp_tools = {}
 local packets_to_send = T{}
 local last_threshold = 0
-local segs_message_id = settings.segs_message_id or 40012
-local rp_msg_id = settings.rp_msg_id or 40017
-local charge_msg_id = settings.charge_msg_id or 40023
+local segs_message_id = settings.segs_message_id
+local rp_msg_id = settings.rp_msg_id
+local charge_msg_id = settings.charge_msg_id
 local auto_grabbing_coroutine = nil
 local moglophone_timer = 0
 local remaining_time
@@ -270,12 +270,20 @@ end
 if not settings.toggle_auto_amp then
 	settings.toggle_auto_amp = true
 end
-
 if settings.ats_mode == 1 then
 	settings.ats_mode = 2
 end
-
+if settings.rp_msg_id < 40021 then 
+	settings.rp_msg_id = 40021 
+end
+if settings.charge_msg_id < 40027 then
+	settings.charge_msg_id = 40027
+end
+if settings.segs_message_id < 40017 then
+	settings.charge_msg_id = 40017
+end
 config.save(settings)
+
 -----------------------------------------------------------------------------------------
 
 local function has_immune_buff(mob)
@@ -507,9 +515,11 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 						settings:save()
 						log('RP Charge active.')
 					end
+					--[[
 				elseif packet['Message ID'] == 40021 then
 						log('Someone else is on that job.')
 					return true
+					]]
 				elseif packet['Message ID'] == rp_msg_id then	
 					if packet['Param 1'] > 5000 then
 						active_charge = false
@@ -1068,19 +1078,23 @@ function moogle_resettinator()
 		amp_tools.amp_oi = nil
 		amp_tools.amp_oi_2 = nil
 	end
-	general_release()
-	release(last_menu)
-	local packet = packets.new('outgoing', 0x05B)
-	packet["Target"]= last_npc
-	packet["Option Index"]="0"
-	packet["_unknown1"]="16384"
-	packet["Target Index"]= last_npc_index
-	packet["Automated Message"]=false
-	packet["_unknown2"]=0
-	packet["Zone"]=windower.ffxi.get_info()['zone']
-	packet["Menu ID"]= last_menu
-	packets.inject(packet)
-
+		general_release()
+	if not (last_menu and last_npc and last_npc_index) then
+		last_npc = 17789079
+		last_menu = 2001
+		last_npc_index = 151
+	end
+		release(last_menu)
+		local packet = packets.new('outgoing', 0x05B)
+		packet["Target"]= last_npc
+		packet["Option Index"]="0"
+		packet["_unknown1"]="16384"
+		packet["Target Index"]= last_npc_index
+		packet["Automated Message"]=false
+		packet["_unknown2"]=0
+		packet["Zone"]=windower.ffxi.get_info()['zone']
+		packet["Menu ID"]= last_menu
+		packets.inject(packet)
 	coroutine.sleep(0.5)
 	
 	local packet = packets.new('outgoing', 0x016, {["Target Index"] = player.index,})
@@ -2164,7 +2178,7 @@ windower.register_event('addon command', function(command,...)
 		settings:save()
 		log('RP Charge expended.')
 	elseif cmd == 'unstuck' then
-		if not (last_npc and last_menu and last_npc_index) then
+		if --[[not (last_npc and last_menu and last_npc_index) or ]] last_npc ~= 17789076 or last_menu ~= 172 or last_npc_index ~= 148 then
 			last_npc = 17789079
 			last_menu = 2001
 			last_npc_index = 151
@@ -3067,7 +3081,7 @@ end)
 
 windower.register_event('load', function()
 	flags.zoning = true
-    windower.add_to_chat(207, 'Welcome to OdyPro 3.6 !')
+    windower.add_to_chat(207, 'Welcome to OdyPro 3.7 !')
     if auto_ody_targetting then
 		local system_mode 
 		if ats_mode == 1 then
