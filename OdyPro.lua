@@ -41,7 +41,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 _addon.name = 'OdyPro'
 _addon.author = 'Staticvoid'
-_addon.version = '3.7'
+_addon.version = '3.7.5'
 _addon.commands = {'op', 'odypro'}
 
 require('tables')
@@ -149,6 +149,7 @@ local settings = config.load('data/settings_'..player_name..'.xml',{
 	segs_message_id = 40017,
 	rp_msg_id = 40021,
 	charge_msg_id = 40027,
+	seg_exchange_id = 45048,
 	ats_max_distance = 15,
 	ats_max_height = 3,
 	ATSOrder = 1,
@@ -196,6 +197,7 @@ local last_threshold = 0
 local segs_message_id = settings.segs_message_id
 local rp_msg_id = settings.rp_msg_id
 local charge_msg_id = settings.charge_msg_id
+local seg_exchange_id = settings.seg_exchange_id
 local auto_grabbing_coroutine = nil
 local moglophone_timer = 0
 local remaining_time
@@ -280,7 +282,7 @@ if settings.charge_msg_id < 40027 then
 	settings.charge_msg_id = 40027
 end
 if settings.segs_message_id < 40017 then
-	settings.charge_msg_id = 40017
+	settings.segs_message_id = 40017
 end
 config.save(settings)
 
@@ -505,7 +507,7 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
 	local packet = packets.parse('incoming', data)
     if flags.in_Odyssey_zone then
 		------------------RP Charge tools--------------------------------
-        if id == 0x02A and not injected then	
+        if id == 0x02A and not is_injected then	
 			if flags.gaolzone then	
 				if packet['Message ID'] == charge_msg_id then
 					if packet['Param 1'] == 6608 then
@@ -595,10 +597,14 @@ windower.register_event('incoming chunk', function(id, data, org, modi, is_injec
         end
 		----------------------------------------------------------------------
 	elseif flags.in_Rabao_zone and not flags.zoning then
-		if id == 0x02A and not injected then
-			if packet['Message ID'] == 45041 then
+		if id == 0x02A and not is_injected then
+			if packet['Message ID'] == seg_exchange_id then
 				induct_data()
 				log("Updating segments")
+			elseif packet['Message ID'] + seg_exchange_id <= 5 then
+				print("Updating Seg message ID.")
+				log('Updating seg exchange ID.')
+				seg_exchange_id = packet['Message ID']
 			end
 		elseif id == 0x034 then
 			local packetchecker = packets.parse('incoming', data)
