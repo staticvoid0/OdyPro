@@ -24,6 +24,12 @@
 
 ## 🧾 Changelog
 
+### **v3.7 → v3.7.5**
+- Updated RP tracking after retail updates.
+- Updated RP charge tracking after retail updates.
+- Future proofing; All tracking should auto-update. RP tracking / RP charge indication tracking / Segment tracking / RP - Segment exchanges.
+- '//op unstuck' bugfix.
+
 ### **v3.6 → v3.7**
 - Updated RP tracking after retail updates.
 - Updated RP charge tracking after retail updates.
